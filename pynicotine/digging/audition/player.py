@@ -123,6 +123,12 @@ class Player:
 
         return self.duration
 
+    @property
+    def audio(self):
+        """The decoded buffer backing the current playback (None when idle)."""
+
+        return self._audio
+
     def peaks(self, buckets: int = 900) -> list[float]:
         """Waveform peaks for the currently loaded buffer."""
 

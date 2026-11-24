@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import threading
 
+from gi.repository import Gdk
+from gi.repository import Gio
 from gi.repository import GLib
 from gi.repository import Gtk
 from gi.repository import Pango
@@ -94,7 +96,18 @@ class DigPlayer:
         drag.connect("drag-update", self._on_waveform_drag)
         self.waveform.add_controller(drag)
 
+        drag_source = Gtk.DragSource(actions=Gdk.DragAction.COPY)
+        drag_source.connect("prepare", self._on_drag_prepare)
+        drag_source.connect("drag-begin", self._on_drag_begin)
+        drag_source.connect("drag-end", self._on_drag_end)
+        self.waveform.add_controller(drag_source)
+        self.drag_source = drag_source
+
         _append(outer, self.waveform)
+
+        self.hint_label = Gtk.Label(label="drag the waveform into Ableton", xalign=0, visible=True)
+        self.hint_label.add_css_class("dim-label")
+        _append(outer, self.hint_label)
 
         controls = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8, visible=True)
 
@@ -126,9 +139,15 @@ class DigPlayer:
         _append(controls, self.keep_button)
         _append(outer, controls)
 
+        bottom_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8, visible=True)
         self.status_label = Gtk.Label(xalign=0, ellipsize=Pango.EllipsizeMode.END, visible=True)
         self.status_label.add_css_class("dim-label")
-        _append(outer, self.status_label)
+        self.status_label.set_hexpand(True)
+        self.export_button = Gtk.Button(label="Reveal file", visible=True)
+        self.export_button.connect("clicked", self._on_export_clicked)
+        _append(bottom_row, self.status_label)
+        _append(bottom_row, self.export_button)
+        _append(outer, bottom_row)
 
         if GTK_API_VERSION >= 4:
             self.window.set_child(outer)  # pylint: disable=no-member
@@ -354,6 +373,94 @@ class DigPlayer:
             return
 
         self.status_label.set_text(f"kept {track.filename} — downloading and queueing separation")
+
+    # -- export and drag-to-DAW ------------------------------------------
+
+    def _export_dir(self):
+
+        from pynicotine.digging.settings import DiggingSettings
+
+        folder = DiggingSettings.load().work_path / "exports"
+        folder.mkdir(parents=True, exist_ok=True)
+        return folder
+
+    def _export_name(self) -> str:
+
+        from pynicotine.digging.export import safe_name
+
+        if self.candidate is not None:
+            label = self.candidate.label
+            source = self.candidate.source
+        else:
+            label = self.track_name
+            source = "local"
+
+        return f"{safe_name(label)} [{source}].wav"
+
+    def export_audio(self):
+        """Write the currently loaded audio to a WAV that a DAW can accept."""
+
+        audio = self.player.audio
+
+        if audio is None or len(audio) == 0:
+            return None
+
+        path = self._export_dir() / self._export_name()
+
+        if path.is_file() and path.stat().st_size > 1024:
+            return path
+
+        from pynicotine.digging.export import write_wav
+
+        return write_wav(audio, path, self.player.sample_rate)
+
+    def _on_drag_prepare(self, _source, _x, _y):
+
+        path = self.export_audio()
+
+        if path is None:
+            return None
+
+        gfile = Gio.File.new_for_path(str(path))
+        providers = [Gdk.ContentProvider.new_for_value(Gdk.FileList.new_from_array([gfile]))]
+
+        try:
+            uri = GLib.Bytes.new(f"{gfile.get_uri()}\r\n".encode())
+            providers.append(Gdk.ContentProvider.new_for_bytes("text/uri-list", uri))
+
+        except Exception:  # noqa: BLE001 - uri-list support is a bonus
+            pass
+
+        return Gdk.ContentProvider.new_union(providers)
+
+    def _on_drag_begin(self, *_args) -> None:
+        self.status_label.set_text("drag into Ableton to import")
+
+    def _on_drag_end(self, *_args) -> None:
+        self.status_label.set_text("ready")
+
+    def _on_export_clicked(self, *_args) -> None:
+
+        path = self.export_audio()
+
+        if path is None:
+            self.status_label.set_text("nothing loaded to export")
+            return
+
+        import subprocess
+        import sys
+
+        try:
+            if sys.platform == "darwin":
+                subprocess.run(["open", "-R", str(path)], check=False)
+            else:
+                subprocess.run(["open", str(path.parent)], check=False)
+
+        except OSError as error:
+            self.status_label.set_text(str(error))
+            return
+
+        self.status_label.set_text(f"exported {path.name}")
 
     # -- waveform interaction --------------------------------------------
 
