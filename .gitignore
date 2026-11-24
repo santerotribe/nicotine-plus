@@ -44,3 +44,7 @@ build-aux/windows/build/
 
 # Ignore portable files
 portable/
+
+# Our local development environment
+.dev/
+.venv/
