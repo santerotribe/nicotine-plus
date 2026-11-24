@@ -196,20 +196,75 @@ def _warp_markers(clip_xml: str, bpm: float, index: int = 0) -> str:
     return replaced
 
 
-def _rewrite_warp(als_path: Path, bpm: float, stem_modes: dict[str, str]) -> None:
+def _collect_samples(xml: str, out_dir: Path, stems: dict[str, Path]) -> str:
+    """Copy stems into the set's Samples/Collected folder and repoint the clips.
+
+    ALS Observatory writes a RelativePath of Samples/Collected/<file> but leaves
+    media in place, so Live reports every sample as missing. Collecting them
+    makes the set self-contained and portable.
+    """
+
+    collected = out_dir / "Samples" / "Collected"
+    collected.mkdir(parents=True, exist_ok=True)
+    sources = {path.name: path for path in stems.values() if Path(path).is_file()}
+
+    def _repoint(match: re.Match) -> str:
+        block = match.group(0)
+        path_match = re.search(r'<Path Value="([^"]*)" />', block)
+
+        if not path_match:
+            return block
+
+        original = Path(path_match.group(1))
+        source = sources.get(original.name)
+
+        if source is None:
+            return block
+
+        target = collected / source.name
+
+        if source.resolve() != target.resolve():
+            shutil.copy2(source, target)
+
+        block = block.replace(
+            f'<Path Value="{path_match.group(1)}" />',
+            f'<Path Value="{target.resolve()}" />',
+        )
+        # RelativePathType 3 (project-relative) is not honoured on load here:
+        # Live reports the collected sample as unopenable. Absolute references
+        # load reliably; "Collect All and Save" restores portability later.
+        block = re.sub(r'<RelativePathType Value="\d+" />', '<RelativePathType Value="0" />', block, count=1)
+        block = re.sub(r'<RelativePath Value="[^"]*" />', '<RelativePath Value="" />', block, count=1)
+        block = re.sub(
+            r'<OriginalFileSize Value="\d+" />',
+            f'<OriginalFileSize Value="{target.stat().st_size}" />',
+            block,
+            count=1,
+        )
+        return block
+
+    return re.sub(r"<FileRef>.*?</FileRef>", _repoint, xml, flags=re.S)
+
+
+def _rewrite_warp(als_path: Path, bpm: float, stem_modes: dict[str, str],
+                  out_dir: Path | None = None, stems: dict[str, Path] | None = None,
+                  warp: bool = True) -> None:
     """Enable warping on every generated clip and write correct warp markers."""
 
     raw = gzip.decompress(als_path.read_bytes())
     xml = raw.decode("utf-8")
 
+    if out_dir is not None and stems:
+        xml = _collect_samples(xml, out_dir, stems)
+
     clips = re.findall(r"<AudioClip\b.*?</AudioClip>", xml, flags=re.S)
 
-    if not clips:
+    if warp and not clips:
         raise AbletonError("generated set contains no audio clips to warp")
 
     order = list(stem_modes.keys())
 
-    for index, clip in enumerate(clips):
+    for index, clip in enumerate(clips if warp else []):
         stem = order[index] if index < len(order) else "other"
         mode = WARP_MODES.get(stem_modes.get(stem, "complex_pro"), 5)
 
@@ -243,7 +298,7 @@ def build_live_set(stems: dict[str, Path], out_dir: Path, name: str, bpm: float,
     if not bpm or bpm <= 0:
         raise AbletonError("a valid tempo is required to build a set")
 
-    out_dir = Path(out_dir).expanduser()
+    out_dir = Path(out_dir).expanduser().resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
     # A fresh run directory per build: ALS Observatory never overwrites output
     run_dir = out_dir / ".observatory-run" / f"{int(time.time())}-{uuid.uuid4().hex[:6]}"
@@ -301,8 +356,8 @@ def build_live_set(stems: dict[str, Path], out_dir: Path, name: str, bpm: float,
     stem_modes = {stem: (_warp_mode_for(stem, settings) if not should_warp else stem_modes.get(stem, "complex_pro"))
                   for stem in stems}
 
-    if should_warp:
-        _rewrite_warp(built, float(bpm), stem_modes)
+    _rewrite_warp(built, float(bpm), stem_modes if should_warp else {}, out_dir=out_dir,
+                  stems=stems, warp=should_warp)
 
     return BuiltSet(path=built, bpm=float(bpm), tracks=tuple(stems), warped=bool(should_warp))
 

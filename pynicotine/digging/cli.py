@@ -48,6 +48,9 @@ def _settings(args) -> DiggingSettings:
     if getattr(args, "pc_url", None):
         settings.pc_url = args.pc_url
 
+    if getattr(args, "out_dir", None):
+        settings.output_dir = args.out_dir
+
     return settings
 
 
@@ -187,6 +190,7 @@ def build_parser() -> argparse.ArgumentParser:
     build_parser_.add_argument("stems")
     build_parser_.add_argument("--bpm", type=float, required=True)
     build_parser_.add_argument("--name")
+    build_parser_.add_argument("--out-dir", dest="out_dir")
     build_parser_.set_defaults(func=cmd_build)
 
     run_parser = subparsers.add_parser("run", help="separate and build a Live Set in one go")
@@ -198,6 +202,7 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--sep-type", dest="sep_type")
     run_parser.add_argument("--pc-url", dest="pc_url")
     run_parser.add_argument("--name")
+    run_parser.add_argument("--out-dir", dest="out_dir")
     run_parser.add_argument("--no-open", action="store_true")
     run_parser.set_defaults(func=cmd_run)
 
