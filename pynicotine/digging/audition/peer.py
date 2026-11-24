@@ -59,7 +59,17 @@ class PeerPreview:
         self.on_audio_ready = on_audio_ready
         events.connect("update-download", self._on_transfer_update)
 
-        log.add_debug(f"Digging: requesting {self.filename} from {self.username}")
+        existing = core.downloads.transfers.get(self.username + self.virtual_path)
+
+        if existing is not None:
+            # A previous preview was paused when the listener moved on: resume it
+            # rather than queueing a duplicate (enqueue_download would no-op).
+            self.transfer = existing
+            log.add(f"Digging: resuming paused peer preview {self.filename}")
+            core.downloads.retry_download(existing, bypass_filter=True)
+            return
+
+        log.add(f"Digging: requesting {self.filename} from {self.username}")
         core.downloads.enqueue_download(
             self.username,
             virtual_path=self.virtual_path,
@@ -107,6 +117,9 @@ class PeerPreview:
         self.bytes = int(transfer.current_byte_offset or 0)
         status = transfer.status or ""
         self.status_text = _status_text(status, transfer.queue_position)
+
+        if status == TransferStatus.TRANSFERRING and self.size:
+            self.status_text = f"downloading from peer ({self.bytes / 1e6:.1f}/{self.size / 1e6:.1f} MB)"
 
         handle = getattr(transfer, "file_handle", None)
 

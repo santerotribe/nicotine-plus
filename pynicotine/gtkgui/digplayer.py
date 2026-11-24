@@ -224,9 +224,15 @@ class DigPlayer:
             )
 
         except Exception as error:  # noqa: BLE001 - catalogue path must survive
+            from pynicotine.logfacility import log
+
+            log.add(f"Digging: peer preview request failed: {error}")
             self.status_label.set_text(f"peer unavailable: {error}")
             return
 
+        from pynicotine.logfacility import log
+
+        log.add(f"Digging: requested peer file {self.source.filename} from {self.source.username}")
         self.peer = peer
         self.status_label.set_text("asking the peer for the real file…")
 
@@ -344,6 +350,42 @@ class DigPlayer:
 
         if self.candidate is not None:
             self.match_label.set_text(f"{self.candidate.label}  (catalogue match in background)")
+
+    def _maybe_resume_peer(self) -> None:
+        """If the growing peer file stalled playback, pick it up again."""
+
+        peer = self.peer
+
+        if peer is None or not self._playing_peer or self.player.is_playing:
+            return
+
+        import time as _time
+
+        now = _time.monotonic()
+
+        if now - getattr(self, "_peer_resume_at", 0.0) < 1.5:
+            return
+
+        if peer.bytes <= getattr(self, "_peer_last_bytes", 0):
+            return
+
+        if peer.bytes >= peer.size > 0:
+            return
+
+        self._peer_resume_at = now
+        self._peer_last_bytes = peer.bytes
+
+        try:
+            self.player.load_stream(peer.partial_path, duration_hint=self.player.duration or self._peer_duration_hint,
+                                    start=self.player.position)
+
+        except (PlayerError, OSError):
+            return
+
+        self.player.play()
+        self.play_button.set_label("⏸")
+        self._start_timer()
+        self._notify_state()
 
     def _maybe_extend_peer(self) -> None:
         """Re-open the growing partial file when playback reaches decoded audio."""
@@ -502,6 +544,14 @@ class DigPlayer:
     def _fail(self, message: str, token: int) -> bool:
 
         if token != self._token:
+            return False
+
+        from pynicotine.logfacility import log
+
+        log.add(f"Digging: audition failed for {self.track_name}: {message}")
+
+        if self._playing_peer or self.player.duration:
+            # The peer file is playing fine; a catalogue miss is not an error
             return False
 
         self.status_label.set_text(message[:220])
@@ -699,10 +749,23 @@ class DigPlayer:
 
     def _seek_fraction(self, fraction: float) -> None:
 
-        if self.player.duration:
-            self.player.seek(fraction * self.player.duration)
-            self._update_labels()
-            self.waveform.queue_draw()
+        if not self.player.duration:
+            return
+
+        self.player.seek(fraction * self.player.duration)
+        self._update_labels()
+        self.waveform.queue_draw()
+
+        # SoundCloud behaviour: clicking the waveform resumes a stopped player
+        if not self.player.is_playing:
+            try:
+                self.player.play()
+                self.play_button.set_label("⏸")
+                self._start_timer()
+                self._notify_state()
+
+            except PlayerError:
+                pass
 
     # -- rendering --------------------------------------------------------
 
@@ -760,6 +823,7 @@ class DigPlayer:
         self._update_labels()
         self.waveform.queue_draw()
         self._maybe_extend_peer()
+        self._maybe_resume_peer()
 
         if self.candidate is not None:
             fraction = self.player.buffered_fraction

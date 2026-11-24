@@ -361,7 +361,7 @@ class Player:
         """Seek within decoded audio, restarting the stream past what is buffered."""
 
         if self._buffer is not None:
-            buffered = self._buffer.frames / self.sample_rate
+            buffered = self._buffer.duration
 
             if seconds <= buffered or self._buffer.done:
                 with self._lock:
