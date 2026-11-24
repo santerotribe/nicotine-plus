@@ -19,7 +19,23 @@ STEM_PRESETS = {
 
 
 def default_config_dir() -> Path:
-    """Return the Nicotine+ config directory, respecting XDG and portable installs."""
+    """Return the Nicotine+ config directory.
+
+    When running inside the client we follow its own --config/--user-data
+    locations, so digging data lands next to the profile in use (including an
+    isolated development profile) instead of the default one.
+    """
+
+    try:
+        from pynicotine.config import config
+
+        config_file = getattr(config, "config_file_path", "")
+
+        if config_file:
+            return Path(config_file).parent
+
+    except Exception:  # noqa: BLE001 - config is optional outside the client
+        pass
 
     xdg = os.environ.get("XDG_CONFIG_HOME")
 
@@ -27,6 +43,23 @@ def default_config_dir() -> Path:
         return Path(xdg) / "nicotine"
 
     return Path.home() / ".config" / "nicotine"
+
+
+def default_data_dir() -> Path:
+    """Directory for downloads, stems and generated sets."""
+
+    try:
+        from pynicotine.config import config
+
+        data_folder = getattr(config, "data_folder_path", "")
+
+        if data_folder:
+            return Path(data_folder)
+
+    except Exception:  # noqa: BLE001
+        pass
+
+    return default_config_dir()
 
 
 def default_observatory_root() -> Path:
@@ -77,7 +110,7 @@ class DiggingSettings:
         base = default_config_dir()
 
         if not self.work_dir:
-            self.work_dir = str(base / "digging")
+            self.work_dir = str(default_data_dir() / "digging")
 
         if not self.output_dir:
             self.output_dir = str(Path(self.work_dir) / "sessions")
