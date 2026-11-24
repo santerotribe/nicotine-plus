@@ -86,6 +86,13 @@ def peaks(audio, buckets: int = 512) -> list[float]:
     return [round(float(value) / peak, 4) for value in values]
 
 
+def self_chunk(value, seconds: float = 0.5) -> int:
+    """Rough frame count for a short analysis window (tolerates arrays/buffers)."""
+
+    rate = getattr(value, "sample_rate", 44100)
+    return max(1, int(seconds * rate))
+
+
 class Player:
     """Decoded or progressively buffered audio with play/pause/seek (PortAudio)."""
 
@@ -104,6 +111,8 @@ class Player:
         self._peaks_cache = None
         self._peaks_frames = -1
         self._stream_source = ""
+        self._fade = None
+        self._adopt_gain = 1.0
 
     # -- buffer -----------------------------------------------------------
 
@@ -126,7 +135,7 @@ class Player:
         from pynicotine.digging.audition.buffer import AudioBuffer, StreamDecoder
 
         self.stop()
-        buffer = AudioBuffer(self.sample_rate, self.channels, duration_hint)
+        buffer = AudioBuffer(self.sample_rate, self.channels, duration_hint, start_offset=start)
         decoder = StreamDecoder(str(source), buffer, start=start)
         decoder.start()
 
@@ -139,6 +148,94 @@ class Player:
             self._position = int(start * self.sample_rate)
             self._peaks_cache = None
             self._peaks_frames = -1
+
+    def preload_stream(self, source: str | Path, duration_hint: float = 0.0, start: float = 0.0):
+        """Decode a stream in the background without disturbing playback.
+
+        Returns (buffer, decoder) for a later adopt().
+        """
+
+        from pynicotine.digging.audition.buffer import AudioBuffer, StreamDecoder
+
+        buffer = AudioBuffer(self.sample_rate, self.channels, duration_hint, start_offset=start)
+        decoder = StreamDecoder(str(source), buffer, start=start)
+        decoder.start()
+        return buffer, decoder
+
+    def adopt(self, buffer, decoder, start: float = 0.0, fade_seconds: float = 0.15,
+              duration_hint: float = 0.0) -> None:
+        """Atomically continue playback from a preloaded buffer, crossfading.
+
+        The outgoing audio keeps playing for a few frames while the incoming
+        buffer fades in, so switching from a catalogue preview to the peer's own
+        file does not produce a click or a hole.
+        """
+
+        with self._lock:
+            old_buffer = self._buffer
+            old_audio = self._audio
+            old_position = self._position
+            old_gain = 1.0
+
+            if fade_seconds > 0 and (old_buffer is not None or old_audio is not None):
+                incoming_gain = self._match_gain(old_buffer, old_audio, buffer)
+
+                self._fade = {
+                    "buffer": old_buffer,
+                    "audio": old_audio,
+                    "position": old_position,
+                    "frames": max(1, int(fade_seconds * self.sample_rate)),
+                    "remaining": max(1, int(fade_seconds * self.sample_rate)),
+                    "gain": old_gain,
+                }
+            else:
+                self._fade = None
+                incoming_gain = 1.0
+
+            self._buffer = buffer
+            self._decoder = decoder
+            self._audio = None
+            self._duration_hint = float(duration_hint or 0.0)
+            self._position = int(start * self.sample_rate)
+            self._peaks_cache = None
+            self._peaks_frames = -1
+            self._adopt_gain = incoming_gain
+
+        if self._stream is None:
+            self._stream = self._create_stream()
+
+        if not self._stream.active:
+            self._stream.start()
+
+    @staticmethod
+    def _match_gain(old_buffer, old_audio, new_buffer) -> float:
+        """Scale the incoming audio to roughly the outgoing loudness."""
+
+        import numpy as np
+
+        try:
+            if old_audio is not None:
+                old = np.asarray(old_audio[:self_chunk(old_audio)])
+            elif old_buffer is not None:
+                old = old_buffer.snapshot()[:self_chunk(old_buffer.snapshot())]
+            else:
+                return 1.0
+
+            new = new_buffer.snapshot()[: self_chunk(new_buffer)]
+
+            if old.size == 0 or new.size == 0:
+                return 1.0
+
+            old_rms = float(np.sqrt(np.mean(old * old)))
+            new_rms = float(np.sqrt(np.mean(new * new)))
+
+            if old_rms < 1e-4 or new_rms < 1e-4:
+                return 1.0
+
+            return float(min(2.0, max(0.5, old_rms / new_rms)))
+
+        except Exception:  # noqa: BLE001 - gain matching is cosmetic
+            return 1.0
 
     def load_array(self, audio) -> float:
         self.stop()
@@ -165,7 +262,7 @@ class Player:
         if self._buffer is None:
             return 1.0 if self._audio is not None else 0.0
 
-        total = self._buffer.frames / self.sample_rate
+        total = self._buffer.duration
 
         if not self._buffer.done and self._duration_hint:
             return max(0.0, min(1.0, total / self._duration_hint))
@@ -257,6 +354,8 @@ class Player:
             self._duration_hint = 0.0
             self._peaks_cache = None
             self._peaks_frames = -1
+            self._fade = None
+            self._adopt_gain = 1.0
 
     def seek(self, seconds: float) -> None:
         """Seek within decoded audio, restarting the stream past what is buffered."""
@@ -291,6 +390,34 @@ class Player:
 
     # -- internals --------------------------------------------------------
 
+    def _read_fade(self, fade, frames: int):
+        """Frames from the outgoing source for the crossfade window."""
+
+        old_buffer = fade.get("buffer")
+        old_audio = fade.get("audio")
+        position = int(fade.get("position", 0))
+        available = 0
+
+        if old_buffer is not None:
+            block, available, _done = old_buffer.read(position - old_buffer.base_frames, frames)
+
+        elif old_audio is not None:
+            end = min(len(old_audio), position + frames)
+            block = old_audio[position:end]
+            available = len(block)
+
+            if available < frames:
+                import numpy as np
+
+                pad = np.zeros((frames - available, old_audio.shape[1]), dtype="float32")
+                block = np.vstack([block, pad])
+
+        else:
+            return None
+
+        fade["position"] = position + frames
+        return block if available else None
+
     def _create_stream(self):
         import sounddevice as sd
 
@@ -311,7 +438,14 @@ class Player:
             buffer = self._buffer
 
         if buffer is not None:
-            block, available, done = buffer.read(self._position, frames)
+            local = self._position - buffer.base_frames
+
+            if local < 0:
+                # Playhead sits before the buffered region (seeked backwards)
+                outdata.fill(0)
+                return
+
+            block, available, done = buffer.read(local, frames)
 
             if block is None:
                 outdata.fill(0)
@@ -321,7 +455,23 @@ class Player:
 
                 return
 
-            outdata[:] = block * self.volume
+            mixed = block * (self.volume * self._adopt_gain)
+            fade = self._fade
+
+            if fade is not None:
+                old_block = self._read_fade(fade, frames)
+
+                if old_block is not None:
+                    alpha = fade["remaining"] / fade["frames"]
+                    incoming_gain = (self._adopt_gain * (1.0 - alpha)) + alpha
+                    mixed = (block * self.volume * incoming_gain) + (old_block * alpha * self.volume)
+                    fade["remaining"] = max(0, fade["remaining"] - frames)
+
+                    if fade["remaining"] <= 0:
+                        self._fade = None
+                        self._adopt_gain = 1.0
+
+            outdata[:] = mixed
             self._position = int(self._position + available)
 
             if available < frames and done:

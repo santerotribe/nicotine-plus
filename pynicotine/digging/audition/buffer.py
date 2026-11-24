@@ -23,7 +23,7 @@ class AudioBuffer:
     """A growable interleaved float32 buffer with concurrent append/read."""
 
     def __init__(self, sample_rate: int = 44100, channels: int = 2,
-                 duration_hint: float = 0.0) -> None:
+                 duration_hint: float = 0.0, start_offset: float = 0.0) -> None:
 
         import numpy as np
 
@@ -32,6 +32,7 @@ class AudioBuffer:
         self._np = np
         self._lock = threading.Lock()
         self._frames = 0
+        self.base_frames = max(0, int(start_offset * sample_rate))
         self._done = False
         self._error = ""
         capacity = max(sample_rate * 30, int(max(0.0, duration_hint) * sample_rate) + sample_rate)
@@ -100,7 +101,9 @@ class AudioBuffer:
 
     @property
     def duration(self) -> float:
-        return self.frames / self.sample_rate
+        """Absolute position of the decoded edge in the source timeline."""
+
+        return (self.base_frames + self.frames) / self.sample_rate
 
     def snapshot(self):
         """Contiguous copy of the buffered audio (for peak extraction/export)."""

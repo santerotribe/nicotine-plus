@@ -262,13 +262,78 @@ class DigPlayer:
 
         resume_at = self.player.position if self.player.duration else 0.0
         hint = self._peer_duration_hint or preview.size / (128 * 1000 / 8) or 0.0
+        path = preview.partial_path
+
+        if self.player.duration > 0:
+            # Something is already playing (likely the catalogue preview): swap
+            # sources underneath it so the listener hears no gap or click.
+            self.status_label.set_text("switching to the peer's file…")
+            threading.Thread(
+                target=self._preload_and_adopt, args=(path, hint, resume_at, token), daemon=True
+            ).start()
+            return False
 
         try:
-            self.player.load_stream(preview.partial_path, duration_hint=hint, start=resume_at)
+            self.player.load_stream(path, duration_hint=hint, start=resume_at)
 
         except PlayerError as error:
             self.status_label.set_text(f"peer file unreadable: {error}")
             return False
+
+        self._peer_started(hint)
+        return False
+
+    def _preload_and_adopt(self, path: str, hint: float, resume_at: float, token: int) -> None:
+        """Buffer the peer file while the catalogue plays, then crossfade over."""
+
+        import time as _time
+
+        try:
+            buffer, decoder = self.player.preload_stream(path, duration_hint=hint, start=resume_at)
+
+        except (PlayerError, OSError) as error:
+            GLib.idle_add(self._fail, f"peer file unreadable: {error}", token)
+            return
+
+        deadline = _time.monotonic() + 6.0
+
+        while _time.monotonic() < deadline:
+            if token != self._token:
+                decoder.cancel()
+                return
+
+            if buffer.frames >= int(1.5 * self.player.sample_rate) or buffer.done:
+                break
+
+            _time.sleep(0.05)
+
+        GLib.idle_add(self._finish_adopt, buffer, decoder, hint, token)
+
+    def _finish_adopt(self, buffer, decoder, hint: float, token: int) -> bool:
+
+        if token != self._token:
+            decoder.cancel()
+            return False
+
+        was_playing = self.player.is_playing
+        position = self.player.position
+
+        try:
+            self.player.adopt(buffer, decoder, start=position, duration_hint=hint,
+                              fade_seconds=0.25)
+
+        except Exception as error:  # noqa: BLE001
+            self.status_label.set_text(f"switch failed: {error}")
+            return False
+
+        self._peer_started(hint)
+
+        if not was_playing:
+            self.player.pause()
+
+        return False
+
+    def _peer_started(self, hint: float) -> None:
 
         self._playing_peer = True
         self.player.play()
@@ -278,10 +343,7 @@ class DigPlayer:
         self.status_label.set_text("playing the peer's file (exact audio)")
 
         if self.candidate is not None:
-            self.match_label.set_text(
-                f"{self.candidate.label}  (catalogue match in background)")
-
-        return False
+            self.match_label.set_text(f"{self.candidate.label}  (catalogue match in background)")
 
     def _maybe_extend_peer(self) -> None:
         """Re-open the growing partial file when playback reaches decoded audio."""
