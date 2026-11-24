@@ -1320,7 +1320,21 @@ class UserBrowse:
 
         else:
             duration = float(getattr(file_data.attributes, "length", 0) or 0)
-            player.load(file_data.path, duration_hint=duration, source=source)
+            source_path = ""
+
+            if self.username == config.sections["server"]["login"]:
+                # Our own shares are already on disk: audition the real file
+                try:
+                    local_folder = core.shares.virtual2real(folder_path)
+                    candidate_path = os.path.join(local_folder, file_data.path)
+
+                    if os.path.isfile(candidate_path):
+                        source_path = candidate_path
+
+                except Exception:  # noqa: BLE001 - fall back to catalogue matching
+                    source_path = ""
+
+            player.load(file_data.path, duration_hint=duration, source=source, source_path=source_path)
 
         self._refresh_dig_icons()
 
@@ -1547,14 +1561,15 @@ class UserBrowse:
     # Key Bindings (file_list_view) #
 
     def on_file_row_activated(self, _tree_view, _iterator, _column_id):
-        """Enter / double-click: audition the selected file."""
+        """Enter / double-click: audition the selected file.
+
+        This used to open the file in the system's default application for
+        local files, which meant Enter launched an external player instead of
+        auditioning. Opening externally stays available in the context menu.
+        """
 
         self.select_files()
-
-        if self.username == config.sections["server"]["login"]:
-            self.on_open_file()
-        else:
-            self.dig_play_selected()
+        self.dig_play_selected()
 
     def on_focus_folder_left_accelerator(self, *_args):
         """Left - focus back parent folder (left arrow)."""
