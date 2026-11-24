@@ -1231,6 +1231,12 @@ class UserBrowse:
     def on_preview_files(self, *_args):
         """Audition selected files: catalogue match first, peer fetch as fallback."""
 
+        self.select_files()
+        basename = next(iter(self.selected_files), "")
+
+        if not basename:
+            return
+
         folder_path = self.active_folder_path
         browsed_user = core.userbrowse.users.get(self.username)
 
@@ -1242,30 +1248,29 @@ class UserBrowse:
             or browsed_user.private_folders.get(folder_path)
             or []
         )
+        file_data = next((entry for entry in files if entry.path == basename), None)
 
-        for file_data in files:
-            if self.selected_files and file_data.path not in self.selected_files:
-                continue
-
-            attributes = file_data.attributes
-            duration = float(getattr(attributes, "length", 0) or 0)
-
-            from pynicotine.digging.actions import TrackSource
-            from pynicotine.gtkgui.digplayer import open_dig_player
-
-            player = open_dig_player(self.window.application)
-            player.load(
-                file_data.path,
-                duration_hint=duration,
-                source=TrackSource(
-                    username=self.username,
-                    folder_path=folder_path,
-                    filename=file_data.path,
-                    size=file_data.size,
-                    attributes=attributes,
-                ),
-            )
+        if file_data is None:
             return
+
+        attributes = file_data.attributes
+        duration = float(getattr(attributes, "length", 0) or 0)
+
+        from pynicotine.digging.actions import TrackSource
+        from pynicotine.gtkgui.digplayer import open_dig_player
+
+        player = open_dig_player(self.window.application)
+        player.load(
+            file_data.path,
+            duration_hint=duration,
+            source=TrackSource(
+                username=self.username,
+                folder_path=folder_path,
+                filename=file_data.path,
+                size=file_data.size,
+                attributes=attributes,
+            ),
+        )
 
     def on_download_files_to_selected(self, selected_folder_paths, _data):
 
