@@ -260,16 +260,38 @@ class DigPlayer:
                 else:
                     url = candidate.preview_url
 
-                duration = self.player.load(url)
+                hint = candidate.duration if candidate.source == "youtube" else 30.0
+                resume_at = 0.0
+
+                if candidate.source == "youtube" and self.candidate is not None:
+                    # Upgrading from the 30 s preview: keep the user's place
+                    resume_at = max(0.0, self.player.position)
+
+                self.player.load_stream(url, duration_hint=hint, start=resume_at)
 
             except (PlayerError, RuntimeError, OSError) as error:
                 GLib.idle_add(self._fail, str(error), token)
                 return
 
-            GLib.idle_add(self._on_loaded, candidate, candidate.label,
-                          f"{candidate.source} · {candidate.score:.2f} match", token, duration)
+            GLib.idle_add(self._on_stream_loaded, candidate, token)
 
         threading.Thread(target=work, daemon=True).start()
+        return False
+
+    def _on_stream_loaded(self, candidate, token: int) -> bool:
+
+        if token != self._token:
+            return False
+
+        self.candidate = candidate
+        self.match_label.set_text(
+            f"{candidate.label}  ({candidate.source} · {candidate.score:.2f} match, buffering)")
+        self.status_label.set_text("buffering…")
+        self._update_labels()
+        self.player.play()
+        self.play_button.set_label("⏸")
+        self._start_timer()
+        self._notify_state()
         return False
 
     # -- playback state ---------------------------------------------------
@@ -316,6 +338,12 @@ class DigPlayer:
     def _on_destroy(self, *_args) -> None:
         self.player.stop()
         self._stop_timer()
+
+        try:
+            self._cache().enforce()
+
+        except OSError:
+            pass
         application = self.application
         application.dig_player = None
 
@@ -376,13 +404,18 @@ class DigPlayer:
 
     # -- export and drag-to-DAW ------------------------------------------
 
-    def _export_dir(self):
+    def _cache(self):
 
+        from pynicotine.digging.cache import PreviewCache
         from pynicotine.digging.settings import DiggingSettings
 
-        folder = DiggingSettings.load().work_path / "exports"
+        settings = DiggingSettings.load()
+        folder = settings.work_path / "exports"
         folder.mkdir(parents=True, exist_ok=True)
-        return folder
+        return PreviewCache(folder, settings.preview_cache_bytes)
+
+    def _export_dir(self):
+        return self._cache().root
 
     def _export_name(self) -> str:
 
@@ -412,7 +445,9 @@ class DigPlayer:
 
         from pynicotine.digging.export import write_wav
 
-        return write_wav(audio, path, self.player.sample_rate)
+        written = write_wav(audio, path, self.player.sample_rate)
+        self._cache().enforce()
+        return written
 
     def _on_drag_prepare(self, _source, _x, _y):
 
@@ -536,6 +571,14 @@ class DigPlayer:
 
         self._update_labels()
         self.waveform.queue_draw()
+
+        if self.candidate is not None:
+            fraction = self.player.buffered_fraction
+
+            if fraction < 1.0:
+                self.status_label.set_text(f"buffering {int(fraction * 100)}%")
+            elif self.player.is_playing:
+                self.status_label.set_text("playing")
 
         if not self.player.is_playing:
             self._timer_id = None

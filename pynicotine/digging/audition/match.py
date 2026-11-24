@@ -213,10 +213,22 @@ def search_youtube(term: str, limit: int = 8, timeout: float = 15.0) -> list[Can
     return candidates
 
 
+_STREAM_CACHE: dict[str, tuple[str, float]] = {}
+STREAM_TTL = 4 * 60 * 60
+
+
 def youtube_stream(candidate: Candidate, timeout: float = 20.0) -> str:
     """Resolve a playable audio URL for a YouTube candidate (expires after hours)."""
 
     if candidate.stream_url:
+        return candidate.stream_url
+
+    import time as _time
+
+    cached = _STREAM_CACHE.get(candidate.store_url)
+
+    if cached and cached[1] > _time.time():
+        candidate.stream_url = cached[0]
         return candidate.stream_url
 
     try:
@@ -251,6 +263,7 @@ def youtube_stream(candidate: Candidate, timeout: float = 20.0) -> str:
         raise RuntimeError("no audio stream found")
 
     candidate.stream_url = stream
+    _STREAM_CACHE[candidate.store_url] = (stream, _time.time() + STREAM_TTL)
     return stream
 
 

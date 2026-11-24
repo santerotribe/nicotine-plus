@@ -102,6 +102,11 @@ class DiggingSettings:
     # Auditioning
     preview_bytes: int = 2 * 1024 * 1024  # roughly 40-60 s of MP3, enough to judge a loop
     player: str = "afplay"
+    preview_cache_mb: int = 2048          # disposable preview/export budget
+
+    @property
+    def preview_cache_bytes(self) -> int:
+        return max(0, int(self.preview_cache_mb)) * 1024 * 1024
 
     extra: dict = field(default_factory=dict)
 

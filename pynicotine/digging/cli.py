@@ -173,6 +173,32 @@ def cmd_preview(args) -> int:
     return 0
 
 
+def cmd_cache(args) -> int:
+    from pynicotine.digging.cache import PreviewCache
+
+    settings = DiggingSettings.load()
+    cache = PreviewCache(settings.work_path / "exports", settings.preview_cache_bytes)
+
+    if args.action == "clear":
+        report = cache.clear()
+
+    elif args.action == "enforce":
+        report = cache.enforce()
+
+    else:
+        report = cache.usage()
+
+    print(json.dumps({
+        "action": args.action,
+        "removed": report.removed,
+        "freed_mb": report.freed_mb,
+        "cached_mb": report.total_mb,
+        "files": report.files,
+        "limit_mb": settings.preview_cache_mb,
+    }, indent=2))
+    return 0
+
+
 def cmd_settings(args) -> int:
     settings = DiggingSettings.load()
 
@@ -273,6 +299,10 @@ def build_parser() -> argparse.ArgumentParser:
     preview_parser.add_argument("--duration", type=float, default=0.0,
                                 help="known track length in seconds, improves scoring")
     preview_parser.set_defaults(func=cmd_preview)
+
+    cache_parser = subparsers.add_parser("cache", help="inspect or clean the disposable preview cache")
+    cache_parser.add_argument("action", nargs="?", choices=("info", "enforce", "clear"), default="info")
+    cache_parser.set_defaults(func=cmd_cache)
 
     settings_parser = subparsers.add_parser("settings", help="show or change digging settings")
     settings_parser.add_argument("action", choices=("show", "set"))

@@ -87,7 +87,7 @@ def peaks(audio, buckets: int = 512) -> list[float]:
 
 
 class Player:
-    """A single decoded buffer with play/pause/seek, driven by PortAudio."""
+    """Decoded or progressively buffered audio with play/pause/seek (PortAudio)."""
 
     def __init__(self, sample_rate: int = DEFAULT_RATE, channels: int = DEFAULT_CHANNELS) -> None:
         self.sample_rate = sample_rate
@@ -98,6 +98,12 @@ class Player:
         self._position = 0
         self._lock = threading.Lock()
         self._on_finish = None
+        self._buffer = None
+        self._decoder = None
+        self._duration_hint = 0.0
+        self._peaks_cache = None
+        self._peaks_frames = -1
+        self._stream_source = ""
 
     # -- buffer -----------------------------------------------------------
 
@@ -114,6 +120,26 @@ class Player:
 
         return self.duration
 
+    def load_stream(self, source: str | Path, duration_hint: float = 0.0, start: float = 0.0) -> None:
+        """Start buffered playback: audio begins as soon as the first chunk lands."""
+
+        from pynicotine.digging.audition.buffer import AudioBuffer, StreamDecoder
+
+        self.stop()
+        buffer = AudioBuffer(self.sample_rate, self.channels, duration_hint)
+        decoder = StreamDecoder(str(source), buffer, start=start)
+        decoder.start()
+
+        with self._lock:
+            self._audio = None
+            self._buffer = buffer
+            self._decoder = decoder
+            self._stream_source = str(source)
+            self._duration_hint = float(duration_hint or 0.0)
+            self._position = int(start * self.sample_rate)
+            self._peaks_cache = None
+            self._peaks_frames = -1
+
     def load_array(self, audio) -> float:
         self.stop()
 
@@ -125,17 +151,53 @@ class Player:
 
     @property
     def audio(self):
-        """The decoded buffer backing the current playback (None when idle)."""
+        """Decoded audio for export: the full buffer, or everything fetched so far."""
+
+        if self._buffer is not None:
+            return self._buffer.snapshot()
 
         return self._audio
 
-    def peaks(self, buckets: int = 900) -> list[float]:
-        """Waveform peaks for the currently loaded buffer."""
+    @property
+    def buffered_fraction(self) -> float:
+        """How much of the track is decoded and seekable (1.0 when fully loaded)."""
 
-        return peaks(self._audio, buckets) if self._audio is not None else []
+        if self._buffer is None:
+            return 1.0 if self._audio is not None else 0.0
+
+        total = self._buffer.frames / self.sample_rate
+
+        if not self._buffer.done and self._duration_hint:
+            return max(0.0, min(1.0, total / self._duration_hint))
+
+        if self._buffer.done and self._duration_hint:
+            return 1.0
+
+        return 1.0 if self._buffer.done else 0.0
+
+    def peaks(self, buckets: int = 900) -> list[float]:
+        """Waveform peaks for what is currently decoded (cached, grows over time)."""
+
+        if self._audio is not None:
+            return peaks(self._audio, buckets)
+
+        if self._buffer is None:
+            return []
+
+        frames = self._buffer.frames
+
+        if self._peaks_cache is not None and frames == self._peaks_frames:
+            return self._peaks_cache
+
+        self._peaks_cache = peaks(self._buffer.snapshot(), buckets)
+        self._peaks_frames = frames
+        return self._peaks_cache
 
     @property
     def duration(self) -> float:
+        if self._buffer is not None:
+            return max(self._duration_hint, self._buffer.duration)
+
         audio = self._audio
 
         if audio is None:
@@ -158,7 +220,7 @@ class Player:
     # -- transport --------------------------------------------------------
 
     def play(self) -> None:
-        if self._audio is None:
+        if self._audio is None and self._buffer is None:
             raise PlayerError("nothing loaded")
 
         if self._stream is None:
@@ -182,10 +244,41 @@ class Player:
 
             self._stream = None
 
+        decoder = self._decoder
+
+        if decoder is not None:
+            decoder.cancel()
+
         with self._lock:
             self._position = 0
+            self._buffer = None
+            self._decoder = None
+            self._stream_source = ""
+            self._duration_hint = 0.0
+            self._peaks_cache = None
+            self._peaks_frames = -1
 
     def seek(self, seconds: float) -> None:
+        """Seek within decoded audio, restarting the stream past what is buffered."""
+
+        if self._buffer is not None:
+            buffered = self._buffer.frames / self.sample_rate
+
+            if seconds <= buffered or self._buffer.done:
+                with self._lock:
+                    self._position = max(0, int(seconds * self.sample_rate))
+                return
+
+            source = self._stream_source
+
+            if not source:
+                with self._lock:
+                    self._position = max(0, int(buffered * self.sample_rate))
+                return
+
+            self.load_stream(source, self._duration_hint, start=seconds)
+            return
+
         with self._lock:
             if self._audio is None:
                 self._position = 0
@@ -215,7 +308,28 @@ class Player:
 
         with self._lock:
             audio = self._audio
+            buffer = self._buffer
 
+        if buffer is not None:
+            block, available, done = buffer.read(self._position, frames)
+
+            if block is None:
+                outdata.fill(0)
+
+                if done:
+                    raise sd.CallbackStop
+
+                return
+
+            outdata[:] = block * self.volume
+            self._position = int(self._position + available)
+
+            if available < frames and done:
+                raise sd.CallbackStop
+
+            return
+
+        with self._lock:
             if audio is None:
                 outdata.fill(0)
                 raise sd.CallbackStop
