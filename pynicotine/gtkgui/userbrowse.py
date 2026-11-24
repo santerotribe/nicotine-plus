@@ -394,6 +394,8 @@ class UserBrowse:
             )
         else:
             self.file_popup_menu.add_items(
+                ("#" + _("_Preview"), self.on_preview_files),
+                ("", None),
                 ("#" + "download_files", self.on_download_files),
                 ("#" + "download_files_to", self.on_download_files_to),
                 ("", None),
@@ -1225,6 +1227,45 @@ class UserBrowse:
 
             core.userbrowse.download_file(
                 self.username, folder_path, file_data, download_folder_path=download_folder_path)
+
+    def on_preview_files(self, *_args):
+        """Audition selected files: catalogue match first, peer fetch as fallback."""
+
+        folder_path = self.active_folder_path
+        browsed_user = core.userbrowse.users.get(self.username)
+
+        if browsed_user is None:
+            return
+
+        files = (
+            browsed_user.public_folders.get(folder_path)
+            or browsed_user.private_folders.get(folder_path)
+            or []
+        )
+
+        for file_data in files:
+            if self.selected_files and file_data.path not in self.selected_files:
+                continue
+
+            attributes = file_data.attributes
+            duration = float(getattr(attributes, "length", 0) or 0)
+
+            from pynicotine.digging.actions import TrackSource
+            from pynicotine.gtkgui.digplayer import open_dig_player
+
+            player = open_dig_player(self.window.application)
+            player.load(
+                file_data.path,
+                duration_hint=duration,
+                source=TrackSource(
+                    username=self.username,
+                    folder_path=folder_path,
+                    filename=file_data.path,
+                    size=file_data.size,
+                    attributes=attributes,
+                ),
+            )
+            return
 
     def on_download_files_to_selected(self, selected_folder_paths, _data):
 

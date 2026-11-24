@@ -123,6 +123,11 @@ class Player:
 
         return self.duration
 
+    def peaks(self, buckets: int = 900) -> list[float]:
+        """Waveform peaks for the currently loaded buffer."""
+
+        return peaks(self._audio, buckets) if self._audio is not None else []
+
     @property
     def duration(self) -> float:
         audio = self._audio
