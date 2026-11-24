@@ -160,7 +160,29 @@ class DigPlayer:
 
         self.player.set_finish_callback(lambda: GLib.idle_add(self._on_finished))
 
+        # Housekeeping runs off the main thread: it touches transfers and disk
+        threading.Thread(target=self._sweep_previews, daemon=True).start()
+
     # -- public API -------------------------------------------------------
+
+    def _sweep_previews(self) -> None:
+        """Drop abandoned preview transfers and stale preview files."""
+
+        try:
+            from pynicotine.core import core
+            from pynicotine.digging.maintenance import sweep
+            from pynicotine.logfacility import log
+
+            report = sweep(core=core)
+
+            if report.transfers_removed or report.files_removed or report.cache_evicted:
+                log.add(f"Digging: cleaned up {report.transfers_removed} preview transfers, "
+                        f"{report.files_removed} files ({report.bytes_freed / (1024 * 1024):.1f} MB)")
+
+        except Exception as error:  # noqa: BLE001 - housekeeping is best effort
+            from pynicotine.logfacility import log
+
+            log.add(f"Digging: cleanup failed: {error}")
 
     def present(self) -> None:
         self.window.present()

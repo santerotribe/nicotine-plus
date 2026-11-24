@@ -182,6 +182,20 @@ def cmd_cache(args) -> int:
     if args.action == "clear":
         report = cache.clear()
 
+    elif args.action == "sweep":
+        from pynicotine.digging.maintenance import sweep
+
+        swept = sweep(settings)
+        print(json.dumps(swept.as_dict(), indent=2))
+        return 0
+
+    elif args.action == "wipe":
+        from pynicotine.digging.maintenance import wipe
+
+        wiped = wipe(settings)
+        print(json.dumps(wiped.as_dict(), indent=2))
+        return 0
+
     elif args.action == "enforce":
         report = cache.enforce()
 
@@ -301,7 +315,8 @@ def build_parser() -> argparse.ArgumentParser:
     preview_parser.set_defaults(func=cmd_preview)
 
     cache_parser = subparsers.add_parser("cache", help="inspect or clean the disposable preview cache")
-    cache_parser.add_argument("action", nargs="?", choices=("info", "enforce", "clear"), default="info")
+    cache_parser.add_argument("action", nargs="?", choices=("info", "enforce", "clear", "sweep", "wipe"),
+                              default="info")
     cache_parser.set_defaults(func=cmd_cache)
 
     settings_parser = subparsers.add_parser("settings", help="show or change digging settings")
