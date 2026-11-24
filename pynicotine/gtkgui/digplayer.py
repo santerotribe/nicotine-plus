@@ -49,6 +49,10 @@ class DigPlayer:
         self.track_name = ""
         self.candidate = None
         self.source = None
+        self.peer = None
+        self._peer_duration_hint = 0.0
+        self._peer_extend_at = 0.0
+        self._playing_peer = False
         self._timer_id = None
         self._token = 0
         self.state_callback = None   # called with (playing: bool) on transport changes
@@ -180,12 +184,126 @@ class DigPlayer:
         self._update_labels()
         self.present()
 
+        self._cancel_peer()
+        self._playing_peer = False
+        self._peer_duration_hint = float(duration_hint or 0.0)
+
         if source_path:
             self.status_label.set_text("loading local file…")
             threading.Thread(target=self._load_local, args=(source_path, token), daemon=True).start()
             return
 
+        # The real file matters more than a catalogue stand-in: start fetching it
+        if self.source is not None:
+            self._start_peer(token)
+
         threading.Thread(target=self._match_fast, args=(filename, duration_hint, token), daemon=True).start()
+
+    # -- peer preview -----------------------------------------------------
+
+    def _start_peer(self, token: int) -> None:
+
+        from pynicotine.digging.audition.peer import PeerPreview
+        from pynicotine.digging.settings import DiggingSettings
+
+        try:
+            settings = DiggingSettings.load()
+            cache_dir = settings.work_path / "previews"
+
+            peer = PeerPreview(
+                username=self.source.username,
+                virtual_path=self.source.virtual_path,
+                filename=self.source.filename,
+                size=self.source.size,
+                attributes=self.source.attributes,
+                cache_dir=cache_dir,
+            )
+            peer.start(
+                on_update=lambda preview: GLib.idle_add(self._on_peer_update, preview, token),
+                on_audio_ready=lambda preview: GLib.idle_add(self._on_peer_audio, preview, token),
+            )
+
+        except Exception as error:  # noqa: BLE001 - catalogue path must survive
+            self.status_label.set_text(f"peer unavailable: {error}")
+            return
+
+        self.peer = peer
+        self.status_label.set_text("asking the peer for the real file…")
+
+    def _cancel_peer(self) -> None:
+
+        peer = self.peer
+
+        if peer is not None:
+            peer.cancel()
+
+        self.peer = None
+
+    def _on_peer_update(self, preview, token: int) -> bool:
+
+        if token != self._token:
+            return False
+
+        if not self.player.is_playing and preview.error:
+            self.status_label.set_text(f"peer: {preview.error}")
+
+        elif not self._playing_peer and not self.player.is_playing:
+            self.status_label.set_text(f"peer: {preview.status_text}")
+
+        return False
+
+    def _on_peer_audio(self, preview, token: int) -> bool:
+
+        if token != self._token or not preview.partial_path:
+            return False
+
+        if self._playing_peer:
+            return False
+
+        resume_at = self.player.position if self.player.duration else 0.0
+        hint = self._peer_duration_hint or preview.size / (128 * 1000 / 8) or 0.0
+
+        try:
+            self.player.load_stream(preview.partial_path, duration_hint=hint, start=resume_at)
+
+        except PlayerError as error:
+            self.status_label.set_text(f"peer file unreadable: {error}")
+            return False
+
+        self._playing_peer = True
+        self.player.play()
+        self.play_button.set_label("⏸")
+        self._start_timer()
+        self._notify_state()
+        self.status_label.set_text("playing the peer's file (exact audio)")
+
+        if self.candidate is not None:
+            self.match_label.set_text(
+                f"{self.candidate.label}  (catalogue match in background)")
+
+        return False
+
+    def _maybe_extend_peer(self) -> None:
+        """Re-open the growing partial file when playback reaches decoded audio."""
+
+        peer = self.peer
+
+        if not self._playing_peer or peer is None or not peer.partial_path:
+            return
+
+        import time as _time
+
+        now = _time.monotonic()
+
+        if now - self._peer_extend_at < 1.5:
+            return
+
+        hint = self.player.duration
+        decoded = self.player.buffered_fraction * hint
+
+        if hint and self.player.position > decoded - 2.5 and self.player.position < hint - 0.5:
+            self._peer_extend_at = now
+            self.player.load_stream(peer.partial_path, duration_hint=hint, start=self.player.position)
 
     # -- matching ---------------------------------------------------------
 
@@ -283,6 +401,13 @@ class DigPlayer:
         if token != self._token:
             return False
 
+        if self._playing_peer:
+            # The peer's own file is already playing: it wins over the catalogue
+            self.match_label.set_text(
+                f"{candidate.label}  ({candidate.source} · {candidate.score:.2f} match, not played)")
+            self._notify_state()
+            return False
+
         self.candidate = candidate
         self.match_label.set_text(
             f"{candidate.label}  ({candidate.source} · {candidate.score:.2f} match, buffering)")
@@ -338,6 +463,7 @@ class DigPlayer:
     def _on_destroy(self, *_args) -> None:
         self.player.stop()
         self._stop_timer()
+        self._cancel_peer()
 
         try:
             self._cache().enforce()
@@ -394,7 +520,7 @@ class DigPlayer:
             from pynicotine.core import core
             from pynicotine.digging.actions import keep_source
 
-            track = keep_source(core, self.source)
+            track = keep_source(core, self.source, peer=self.peer)
 
         except Exception as error:  # noqa: BLE001 - surface the reason in the UI
             self.status_label.set_text(f"keep failed: {error}")
@@ -571,6 +697,7 @@ class DigPlayer:
 
         self._update_labels()
         self.waveform.queue_draw()
+        self._maybe_extend_peer()
 
         if self.candidate is not None:
             fraction = self.player.buffered_fraction

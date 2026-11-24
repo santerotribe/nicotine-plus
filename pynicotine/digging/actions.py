@@ -30,8 +30,9 @@ def crate_for(settings: DiggingSettings | None = None) -> Crate:
     return Crate(settings.work_path / "crate.json")
 
 
-def keep_source(core, source: TrackSource, settings: DiggingSettings | None = None) -> CrateTrack:
-    """Add a browsed file to the crate and start downloading it."""
+def keep_source(core, source: TrackSource, settings: DiggingSettings | None = None,
+                peer=None) -> CrateTrack:
+    """Add a browsed file to the crate and make sure the real file is kept."""
 
     settings = settings or DiggingSettings.load()
     settings.ensure_dirs()
@@ -48,6 +49,16 @@ def keep_source(core, source: TrackSource, settings: DiggingSettings | None = No
 
     download_folder = settings.work_path / "downloads" / source.username
     download_folder.mkdir(parents=True, exist_ok=True)
+
+    if peer is not None and peer.username == source.username and peer.virtual_path == source.virtual_path:
+        # A preview download is already in flight: promote it when it finishes
+        kept_path = peer.promote(download_folder)
+
+        if kept_path is not None:
+            track.local_path = str(kept_path)
+
+        crate.save()
+        return track
 
     core.downloads.enqueue_download(
         source.username,
