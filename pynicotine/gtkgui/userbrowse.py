@@ -362,6 +362,13 @@ class UserBrowse:
                     "sort_column": "length_data"
                 },
 
+                "playback": {
+                    "column_type": "icon",
+                    "title": "",
+                    "width": 30,
+                    "hide_header": True
+                },
+
                 # Hidden data columns
                 "size_data": {"data_type": GObject.TYPE_UINT64},
                 "bitrate_data": {"data_type": GObject.TYPE_UINT},
@@ -406,6 +413,20 @@ class UserBrowse:
                 ("", None),
                 (">" + _("User Actions"), self.user_popup_menu)
             )
+
+        # Digging: per-row play glyph (last visible column)
+        visible_columns = self.file_list_view.widget.get_columns()
+        self.playback_column = visible_columns[-1] if visible_columns else None
+        self._dig_active_row = None
+
+        try:
+            click_controller = Gtk.GestureClick()
+            click_controller.connect("pressed", self.on_file_list_clicked)
+            self.file_list_view.widget.add_controller(click_controller)
+
+        except AttributeError:
+            # GTK 3 fallback
+            self.file_list_view.widget.connect("button-release-event", self._on_file_list_button_gtk3)
 
         # Key Bindings (folder_tree_view)
         Accelerator("Right", self.folder_tree_view.widget, self.on_folder_expand_accelerator)
@@ -835,7 +856,8 @@ class UserBrowse:
                 size,
                 bitrate,
                 length,
-                file_attributes
+                file_attributes,
+                "media-playback-start-symbolic"
             ], select_row=False)
 
         self.file_list_view.unfreeze()
@@ -1228,20 +1250,25 @@ class UserBrowse:
             core.userbrowse.download_file(
                 self.username, folder_path, file_data, download_folder_path=download_folder_path)
 
+    # Digging #
+
     def on_preview_files(self, *_args):
-        """Audition selected files: catalogue match first, peer fetch as fallback."""
+        """Audition the selected file (context menu action)."""
+        self.dig_play_selected()
 
-        self.select_files()
-        basename = next(iter(self.selected_files), "")
+    def _dig_player(self):
 
-        if not basename:
-            return
+        from pynicotine.gtkgui.digplayer import open_dig_player
+
+        return open_dig_player(self.window.application)
+
+    def _dig_file_data(self, basename):
 
         folder_path = self.active_folder_path
         browsed_user = core.userbrowse.users.get(self.username)
 
         if browsed_user is None:
-            return
+            return None, None
 
         files = (
             browsed_user.public_folders.get(folder_path)
@@ -1249,28 +1276,120 @@ class UserBrowse:
             or []
         )
         file_data = next((entry for entry in files if entry.path == basename), None)
+        return file_data, folder_path
+
+    def dig_play_selected(self):
+        """Play/pause the selected row, starting playback if it is a new file."""
+
+        self.select_files()
+        basename = next(iter(self.selected_files), "")
+
+        if basename:
+            self.dig_play(basename)
+
+    def dig_play(self, basename):
+
+        file_data, folder_path = self._dig_file_data(basename)
 
         if file_data is None:
             return
 
-        attributes = file_data.attributes
-        duration = float(getattr(attributes, "length", 0) or 0)
-
         from pynicotine.digging.actions import TrackSource
-        from pynicotine.gtkgui.digplayer import open_dig_player
 
-        player = open_dig_player(self.window.application)
-        player.load(
-            file_data.path,
-            duration_hint=duration,
-            source=TrackSource(
-                username=self.username,
-                folder_path=folder_path,
-                filename=file_data.path,
-                size=file_data.size,
-                attributes=attributes,
-            ),
+        source = TrackSource(
+            username=self.username,
+            folder_path=folder_path,
+            filename=file_data.path,
+            size=file_data.size,
+            attributes=file_data.attributes,
         )
+
+        player = self._dig_player()
+        current = player.source
+        same_track = (
+            current is not None
+            and getattr(current, "username", "") == source.username
+            and getattr(current, "virtual_path", "") == source.virtual_path
+        )
+
+        player.state_callback = self._refresh_dig_icons
+
+        if same_track:
+            player.toggle()
+
+        else:
+            duration = float(getattr(file_data.attributes, "length", 0) or 0)
+            player.load(file_data.path, duration_hint=duration, source=source)
+
+        self._refresh_dig_icons(player.player.is_playing)
+
+    def _refresh_dig_icons(self, _playing=False):
+        """Show a pause glyph on the row that is playing, play glyphs elsewhere."""
+
+        if not self.__dict__:
+            # Tab was closed
+            return
+
+        player = getattr(self.window.application, "dig_player", None)
+        current = getattr(player, "source", None)
+        active = None
+
+        if current is not None and getattr(current, "username", "") == self.username:
+            active = getattr(current, "filename", None)
+
+        playing = bool(player is not None and player.player.is_playing)
+        previous = getattr(self, "_dig_active_row", None)
+
+        if previous and previous != active:
+            iterator = self.file_list_view.iterators.get(previous)
+
+            if iterator is not None:
+                self.file_list_view.set_row_value(iterator, "playback", "media-playback-start-symbolic")
+
+        self._dig_active_row = active
+
+        if active:
+            iterator = self.file_list_view.iterators.get(active)
+
+            if iterator is not None:
+                icon = "media-playback-pause-symbolic" if playing else "media-playback-start-symbolic"
+                self.file_list_view.set_row_value(iterator, "playback", icon)
+
+    def _on_file_list_button_gtk3(self, _widget, event):
+        self.on_file_list_clicked(type("Gesture", (), {"set_state": lambda *_args: None})(), 1, event.x, event.y)
+        return False
+
+    def on_file_list_clicked(self, gesture, _n_press, x, y):
+        """A click on the play glyph of a row auditions that row."""
+
+        if self.playback_column is None:
+            return
+
+        result = self.file_list_view.widget.get_path_at_pos(int(x), int(y))
+
+        if not result or len(result) < 3:
+            return
+
+        if isinstance(result[0], bool):
+            _ok, path, column = result[0], result[1], result[2]
+        else:
+            path, column = result[0], result[1]
+
+        if column is not self.playback_column:
+            return
+
+        gesture.set_state(Gtk.EventSequenceState.CLAIMED)
+
+        try:
+            iterator = self.file_list_view.model.get_iter(path)
+            basename = self.file_list_view.get_row_value(iterator, "filename")
+
+        except (TypeError, ValueError):
+            return
+
+        self.file_list_view.widget.get_selection().select_path(path)
+        self.selected_files = {basename: 0}
+        self.dig_play(basename)
 
     def on_download_files_to_selected(self, selected_folder_paths, _data):
 
@@ -1415,286 +1534,3 @@ class UserBrowse:
 
     def on_copy_file_url(self, *_args):
         file_path = self.get_selected_file_path()
-        file_url = core.userbrowse.get_soulseek_url(self.username, file_path)
-        clipboard.copy_text(file_url)
-
-    # Key Bindings (file_list_view) #
-
-    def on_file_row_activated(self, _tree_view, _iterator, _column_id):
-
-        self.select_files()
-
-        if self.username == config.sections["server"]["login"]:
-            self.on_open_file()
-        else:
-            self.on_download_files()
-
-    def on_focus_folder_left_accelerator(self, *_args):
-        """Left - focus back parent folder (left arrow)."""
-
-        column_id = self.file_list_view.get_focused_column()
-
-        if next(self.file_list_view.get_visible_columns(), None) != column_id:
-            return False  # allow horizontal scrolling
-
-        self.folder_tree_view.grab_focus()
-        return True
-
-    def on_focus_folder_accelerator(self, *_args):
-        """BackSpace, \backslash - focus selection back parent folder"""
-
-        self.folder_tree_view.grab_focus()
-        return True
-
-    def on_file_transfer_to_accelerator(self, *_args):
-        """Ctrl+Enter - Upload File(s) To, Download File(s) Into."""
-
-        if self.file_list_view.is_empty():  # avoid navigation trap
-            self.folder_tree_view.grab_focus()
-            return True
-
-        self.select_files()
-
-        if self.username == config.sections["server"]["login"]:
-            if self.file_list_view.is_selection_empty():
-                self.on_upload_folder()
-            else:
-                self.on_upload_files()
-
-            return True
-
-        self.on_download_files_to()
-        return True
-
-    def on_file_transfer_accelerator(self, *_args):
-        """Shift+Ctrl+Enter - Upload File(s) To, Download File(s) (without prompt)."""
-
-        if self.file_list_view.is_empty():
-            self.folder_tree_view.grab_focus()  # avoid nav trap
-            return True
-
-        self.select_files()
-
-        if self.username == config.sections["server"]["login"]:
-            if self.file_list_view.is_selection_empty():
-                self.on_upload_folder()
-            else:
-                self.on_upload_files()
-
-            return True
-
-        self.on_download_files()
-        return True
-
-    def on_file_transfer_multi_accelerator(self, *_args):
-        """Shift+Enter - Open File, Download Files (multiple)."""
-
-        if self.file_list_view.is_empty():
-            self.folder_tree_view.grab_focus()  # avoid nav trap
-            return True
-
-        self.select_files()  # support multi-select with Up/Dn keys
-
-        if self.username == config.sections["server"]["login"]:
-            self.on_open_file()
-        else:
-            self.on_download_files()
-
-        return True
-
-    def on_file_open_manager_accelerator(self, *_args):
-        """Ctrl+Alt+Enter - Open in File Manager."""
-
-        if self.username == config.sections["server"]["login"]:
-            self.on_file_manager()
-
-        else:  # [user is not self]
-            self.on_file_properties_accelerator()  # same as Alt+Enter
-
-        return True
-
-    def on_file_properties_accelerator(self, *_args):
-        """Alt+Enter - show file properties dialog."""
-
-        if self.file_list_view.is_empty():
-            self.folder_tree_view.grab_focus()  # avoid nav trap
-
-        self.on_file_properties(*_args)
-        return True
-
-    # Callbacks (General) #
-
-    def on_show_progress_bar(self, progress_bar):
-        """Enables indeterminate progress bar mode when tab is active."""
-
-        if not self.indeterminate_progress and progress_bar.get_fraction() <= 0.0:
-            self.set_indeterminate_progress()
-
-    def on_hide_progress_bar(self, progress_bar):
-        """Disables indeterminate progress bar mode when switching to another tab."""
-
-        if self.indeterminate_progress:
-            self.indeterminate_progress = False
-            progress_bar.set_fraction(0.0)
-
-    def on_path_bar_clicked(self, _button, folder_path):
-
-        iterator = self.folder_tree_view.iterators.get(folder_path)
-
-        if iterator:
-            self.folder_tree_view.select_row(iterator)
-            self.folder_tree_view.grab_focus()
-
-    def on_path_bar_scroll(self, adjustment, *_args):
-
-        adjustment_end = (adjustment.get_upper() - adjustment.get_page_size())
-
-        if adjustment.get_value() < adjustment_end:
-            self.path_bar_container.emit("scroll-child", Gtk.ScrollType.END, True)
-
-    def on_user_statistics(self, *_args):
-        core.userbrowse.show_user_statistics(self.username)
-
-    def on_expand(self, *_args):
-
-        active = self.expand_button.get_active()
-
-        if active:
-            icon_name = "view-restore-symbolic"
-            tooltip_text = _("Collapse All")
-            self.folder_tree_view.expand_all_rows()
-        else:
-            icon_name = "view-fullscreen-symbolic"
-            tooltip_text = _("Expand All")
-            self.folder_tree_view.collapse_all_rows()
-
-        icon_args = (Gtk.IconSize.BUTTON,) if GTK_API_VERSION == 3 else ()  # pylint: disable=no-member
-        self.expand_icon.set_from_icon_name(icon_name, *icon_args)
-        self.expand_button.set_tooltip_text(tooltip_text)
-
-        config.sections["userbrowse"]["expand_folders"] = active
-
-    def on_tab_popup(self, *_args):
-        self.user_popup_menu.toggle_user_items()
-
-    def on_search_enabled(self, *_args):
-        self.search_button.set_active(self.search_entry_revealer.get_reveal_child())
-
-    def on_show_search(self, *_args):
-
-        active = self.search_button.get_active()
-
-        if active:
-            self.search_entry.grab_focus()
-
-        elif not self.file_list_view.is_selection_empty():
-            self.file_list_view.grab_focus()
-
-        else:
-            self.folder_tree_view.grab_focus()
-
-        self.search_entry_revealer.set_reveal_child(active)
-
-    def on_search(self, *_args):
-        self.find_search_matches()
-
-    def on_search_entry_changed(self, *_args):
-        if len(self.search_entry.get_text()) <= 0:
-            self.find_search_matches()
-
-    def on_save(self, *_args):
-
-        if self.save_button_timer_id is not None:
-            GLib.Source.remove(self.save_button_timer_id)
-            self.save_button_timer_id = None
-
-        self.save_spinner.start()
-
-        stack = self.save_spinner.get_parent()
-        stack.set_visible_child(self.save_spinner)
-
-        core.userbrowse.save_shares_list_to_disk(self.username)
-
-    def on_refresh(self, *_args):
-
-        if self.refreshing:
-            return
-
-        # Remember selection after refresh
-        self.select_files()
-        file_path = self.get_selected_file_path()
-
-        if self.username == config.sections["server"]["login"]:
-            core.userbrowse.browse_local_shares(
-                path=file_path, permission_level=self.local_permission_level, new_request=True)
-        else:
-            core.userbrowse.browse_user(self.username, path=file_path, new_request=True)
-
-    def on_focus(self):
-
-        if self.file_list_view.is_selection_empty():
-            self.folder_tree_view.grab_focus()
-        else:
-            self.file_list_view.grab_focus()
-
-        return True
-
-    def on_close(self, *_args):
-        core.userbrowse.remove_user(self.username)
-
-    def on_close_all_tabs(self, *_args):
-        self.userbrowses.remove_all_pages()
-
-    # Key Bindings (General) #
-
-    def on_expand_accelerator(self, *_args):
-        """Ctrl+\backslash - Expand / Collapse All."""
-
-        self.expand_button.set_active(not self.expand_button.get_active())
-        return True
-
-    def on_save_accelerator(self, *_args):
-        """Ctrl+S - Save Shares List."""
-
-        if not self.save_button.get_sensitive():
-            return False
-
-        self.on_save()
-        return True
-
-    def on_refresh_accelerator(self, *_args):
-        """Ctrl+R or F5 - Refresh."""
-
-        self.on_refresh()
-        return True
-
-    def on_search_accelerator(self, *_args):
-        """Ctrl+F - Find."""
-
-        if self.search_button.get_sensitive():
-            self.search_button.set_active(True)
-            self.search_entry.grab_focus()
-
-        return True
-
-    def on_search_next_accelerator(self, *_args):
-        """Ctrl+G or F3 - Find Next."""
-
-        if not self.find_search_matches():
-            self.search_entry.grab_focus()
-
-        return True
-
-    def on_search_previous_accelerator(self, *_args):
-        """Shift+Ctrl+G or Shift+F3 - Find Previous."""
-
-        if not self.find_search_matches(reverse=True):
-            self.search_entry.grab_focus()
-
-        return True
-
-    def on_search_escape_accelerator(self, *_args):
-        """Escape - navigate out of search_entry."""
-
-        self.search_button.set_active(False)
-        return True

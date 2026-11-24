@@ -49,6 +49,7 @@ class DigPlayer:
         self.source = None
         self._timer_id = None
         self._token = 0
+        self.state_callback = None   # called with (playing: bool) on transport changes
 
         kwargs = {
             "title": WINDOW_TITLE,
@@ -267,6 +268,7 @@ class DigPlayer:
         self.player.play()
         self.play_button.set_label("⏸")
         self._start_timer()
+        self._notify_state()
         return False
 
     def _fail(self, message: str, token: int) -> bool:
@@ -289,6 +291,7 @@ class DigPlayer:
         self.play_button.set_label("▶")
         self._stop_timer()
         self._update_labels()
+        self._notify_state()
         return False
 
     def _on_destroy(self, *_args) -> None:
@@ -296,6 +299,17 @@ class DigPlayer:
         self._stop_timer()
         application = self.application
         application.dig_player = None
+
+    def toggle(self) -> None:
+        """Play or pause whatever is loaded (used by Enter and row buttons)."""
+
+        if self.player.duration:
+            self._on_play_clicked()
+
+    def _notify_state(self) -> None:
+
+        if self.state_callback:
+            self.state_callback(self.player.is_playing)
 
     def _on_play_clicked(self, *_args) -> None:
 
@@ -312,6 +326,8 @@ class DigPlayer:
 
         except PlayerError as error:
             self.status_label.set_text(str(error))
+
+        self._notify_state()
 
     def _seek_relative(self, delta: float) -> None:
         self.player.skip(delta)
@@ -361,30 +377,39 @@ class DigPlayer:
     # -- rendering --------------------------------------------------------
 
     def _draw_waveform(self, _area, context, width, height) -> None:
+        """SoundCloud-style waveform: grey unplayed bars, orange played bars."""
 
-        context.set_source_rgb(0.16, 0.16, 0.18)
+        context.set_source_rgb(0.07, 0.07, 0.08)
         context.rectangle(0, 0, width, height)
         context.fill()
 
-        peaks = self.player.peaks(900)
+        peaks = self.player.peaks(int(max(1, width / 3)))
         center = height / 2
+        duration = self.player.duration
+        played = (self.player.position / duration) if duration else 0.0
+        played = max(0.0, min(1.0, played))
 
         if peaks:
-            context.set_source_rgb(0.55, 0.78, 0.95)
-            step = max(1.0, width / len(peaks))
+            step = width / len(peaks)
+            bar_width = max(1.0, step * 0.55)
+            split = played * len(peaks)
 
             for index, value in enumerate(peaks):
-                bar = max(1.0, value * (height * 0.92))
-                context.rectangle(index * step, center - (bar / 2), max(1.0, step * 0.7), bar)
+                bar = max(1.5, value * (height * 0.86))
+                x = index * step
+
+                if index < split:
+                    context.set_source_rgb(0.996, 0.333, 0.0)   # SoundCloud orange
+                else:
+                    context.set_source_rgb(0.42, 0.42, 0.45)
+
+                context.rectangle(x, center - (bar / 2), bar_width, bar)
 
             context.fill()
 
-        duration = self.player.duration
-
         if duration:
-            position = max(0.0, min(1.0, self.player.position / duration))
-            context.set_source_rgb(0.98, 0.75, 0.35)
-            context.rectangle((position * width) - 1, 0, 2, height)
+            context.set_source_rgb(0.95, 0.95, 0.95)
+            context.rectangle((played * width) - 1, 0, 1.5, height)
             context.fill()
 
     def _start_timer(self) -> None:
