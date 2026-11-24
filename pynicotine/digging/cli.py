@@ -17,6 +17,7 @@ import sys
 from pathlib import Path
 
 from pynicotine.digging import ableton, analyze, pipeline
+from pynicotine.digging.crate import slugify
 from pynicotine.digging.renderers.base import RenderError, audio_files_in
 from pynicotine.digging.settings import DiggingSettings, STEM_PRESETS
 
@@ -93,10 +94,11 @@ def cmd_build(args) -> int:
         return 2
 
     stems = {path.stem.lower(): path for path in files}
+    session_name = args.name or folder.name
     built = ableton.build_live_set(
         stems=stems,
-        out_dir=settings.output_path / folder.name,
-        name=args.name or folder.name,
+        out_dir=settings.output_path / slugify(session_name),
+        name=session_name,
         bpm=args.bpm,
         settings=settings,
     )
