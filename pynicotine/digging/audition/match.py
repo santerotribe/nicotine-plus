@@ -20,6 +20,7 @@ import urllib.parse
 import urllib.request
 
 from dataclasses import dataclass
+from functools import lru_cache
 
 ITUNES_SEARCH = "https://itunes.apple.com/search"
 DEFAULT_TIMEOUT = 8.0
@@ -35,7 +36,7 @@ NOISE_WORDS = {
     "extended", "club", "dub", "instrumental", "vinyl", "rip", "web", "flac",
     "mp3", "320", "128", "256", "lossless", "promo", "bootleg",
 }
-SEPARATORS = re.compile(r"\s+[-–—]\s+|\s+–\s+")
+SEPARATORS = re.compile(r"\s*[-–—]\s+|\s+[-–—]\s*")
 
 
 @dataclass
@@ -48,6 +49,8 @@ class Candidate:
     artwork: str
     store_url: str
     score: float = 0.0
+    source: str = "itunes"   # itunes | youtube
+    stream_url: str = ""     # resolved on demand for youtube
 
     @property
     def label(self) -> str:
@@ -84,8 +87,17 @@ def _tidy(value: str) -> str:
     return value.strip(" .-_")
 
 
+def _fold(value: str) -> str:
+    """Lowercase and strip accents so 'Chloé' matches 'Chloe'."""
+
+    import unicodedata
+
+    normalized = unicodedata.normalize("NFKD", value)
+    return "".join(char for char in normalized if not unicodedata.combining(char)).lower()
+
+
 def _tokens(value: str) -> list[str]:
-    return [token for token in re.split(r"[^a-z0-9]+", value.lower()) if token and token not in NOISE_WORDS]
+    return [token for token in re.split(r"[^a-z0-9]+", _fold(value)) if token and token not in NOISE_WORDS]
 
 
 def similarity(left: str, right: str) -> float:
@@ -107,6 +119,7 @@ def _request_json(url: str, timeout: float = DEFAULT_TIMEOUT) -> dict:
         return json.loads(response.read().decode("utf-8"))
 
 
+@lru_cache(maxsize=256)
 def search_itunes(term: str, limit: int = 8, timeout: float = DEFAULT_TIMEOUT) -> list[Candidate]:
     """Search the iTunes catalogue (no API key, 30 s previews)."""
 
@@ -139,61 +152,209 @@ def search_itunes(term: str, limit: int = 8, timeout: float = DEFAULT_TIMEOUT) -
     return candidates
 
 
+def _clean_uploader(uploader: str) -> str:
+    """'Ruggier - Topic' / 'ArtistVEVO' -> 'Ruggier' / 'Artist'."""
+
+    value = re.sub(r"\s*-\s*Topic\s*$", "", uploader or "", flags=re.IGNORECASE)
+    value = re.sub(r"VEVO$", "", value, flags=re.IGNORECASE)
+    return value.strip()
+
+
+@lru_cache(maxsize=256)
+def search_youtube(term: str, limit: int = 8, timeout: float = 15.0) -> list[Candidate]:
+    """Search YouTube through yt-dlp without downloading anything."""
+
+    try:
+        import yt_dlp
+
+    except ImportError:
+        return []
+
+    options = {
+        "quiet": True,
+        "no_warnings": True,
+        "skip_download": True,
+        "extract_flat": True,
+        "noprogress": True,
+        "socket_timeout": timeout,
+        "playlist_items": f"1-{max(1, limit)}",
+    }
+
+    try:
+        with yt_dlp.YoutubeDL(options) as ydl:
+            info = ydl.extract_info(f"ytsearch{max(1, limit)}:{term}", download=False)
+
+    except Exception:  # noqa: BLE001 - yt-dlp raises a wide range of errors
+        return []
+
+    candidates: list[Candidate] = []
+
+    for entry in info.get("entries") or []:
+        if not entry:
+            continue
+
+        title = str(entry.get("title") or "").strip()
+        duration = float(entry.get("duration") or 0.0)
+
+        if not title:
+            continue
+
+        candidates.append(Candidate(
+            artist=_clean_uploader(str(entry.get("uploader") or entry.get("channel") or "")),
+            title=title,
+            album="",
+            duration=duration,
+            preview_url="",
+            artwork=str(entry.get("thumbnail") or ""),
+            store_url=str(entry.get("webpage_url") or f"https://www.youtube.com/watch?v={entry.get('id')}"),
+            source="youtube",
+        ))
+
+    return candidates
+
+
+def youtube_stream(candidate: Candidate, timeout: float = 20.0) -> str:
+    """Resolve a playable audio URL for a YouTube candidate (expires after hours)."""
+
+    if candidate.stream_url:
+        return candidate.stream_url
+
+    try:
+        import yt_dlp
+
+    except ImportError as error:
+        raise RuntimeError("yt-dlp is not installed") from error
+
+    options = {
+        "quiet": True,
+        "no_warnings": True,
+        "skip_download": True,
+        "noprogress": True,
+        "socket_timeout": timeout,
+        "format": "bestaudio/best",
+    }
+
+    url = candidate.store_url or f"https://www.youtube.com/watch?v={candidate.store_url}"
+
+    with yt_dlp.YoutubeDL(options) as ydl:
+        info = ydl.extract_info(url, download=False)
+
+    stream = info.get("url") or ""
+
+    if not stream:
+        for fmt in reversed(info.get("formats") or []):
+            if fmt.get("acodec") not in (None, "none") and fmt.get("url"):
+                stream = fmt["url"]
+                break
+
+    if not stream:
+        raise RuntimeError("no audio stream found")
+
+    candidate.stream_url = stream
+    return stream
+
+
 def score_candidate(candidate: Candidate, parsed: ParsedName,
                     expected_duration: float = 0.0) -> float:
     """Blend artist/title similarity with a duration check."""
 
     title_score = similarity(parsed.title, candidate.title)
-    artist_score = similarity(parsed.artist, candidate.artist) if parsed.artist else 0.5
-    score = (title_score * 0.7) + (artist_score * 0.3)
+
+    # YouTube titles usually carry the artist ("Chris Stussy - Desire"), and
+    # channels are inconsistent, so score the combined title+artist text too.
+    haystack = f"{candidate.title} {candidate.artist}".strip()
+    content_score = similarity(f"{parsed.artist} {parsed.title}".strip(), haystack)
+
+    if parsed.artist and candidate.artist:
+        artist_score = similarity(parsed.artist, candidate.artist)
+    else:
+        artist_score = content_score
+
+    score = (title_score * 0.45) + (content_score * 0.35) + (artist_score * 0.2)
 
     if expected_duration and candidate.duration:
         delta = abs(candidate.duration - expected_duration)
-        # Full-length Soulseek files vs catalogue runtime: allow edits/mixes
+        # Duration is the strongest disambiguator between an original, an edit
+        # and an unrelated song with a similar name.
         if delta <= 3:
-            score += 0.15
-        elif delta <= 15:
-            score += 0.05
-        elif delta > 90:
-            score -= 0.2
+            score += 0.25
+        elif delta <= 10:
+            score += 0.12
+        elif delta <= 30:
+            score += 0.02
+        elif delta <= 60:
+            score -= 0.15
+        else:
+            score -= 0.35
 
     return max(0.0, min(1.0, score))
 
 
 def resolve(filename: str, expected_duration: float = 0.0,
-            minimum_score: float = 0.45, limit: int = 8) -> list[Candidate]:
-    """Return catalogue matches for a filename, best first."""
+            minimum_score: float = 0.45, limit: int = 8,
+            sources: tuple[str, ...] = ("itunes", "youtube"),
+            timeout: float = 15.0) -> list[Candidate]:
+    """Return catalogue matches for a filename, best first.
+
+    iTunes answers in a few hundred milliseconds and has clean metadata;
+    YouTube has many more bootlegs, edits and white labels but takes seconds.
+    Both are queried concurrently so the YouTube breadth does not delay the
+    fast path.
+    """
+
+    from concurrent.futures import ThreadPoolExecutor
 
     parsed = parse_filename(filename)
-    queries = []
+    primary = f"{parsed.artist} {parsed.title}".strip() if parsed.artist else parsed.title
+    queries = [primary]
 
-    if parsed.artist:
-        queries.append(f"{parsed.artist} {parsed.title}")
+    if parsed.title != primary:
+        queries.append(parsed.title)
 
-    queries.append(parsed.title)
-
-    if parsed.artist:
-        queries.append(parsed.artist)
-
-    seen: dict[str, Candidate] = {}
+    tasks = []
 
     for query in queries:
-        for candidate in search_itunes(query, limit=limit):
-            key = f"{candidate.artist}|{candidate.title}".lower()
+        if "itunes" in sources:
+            tasks.append(("itunes", query))
 
-            if key in seen:
-                continue
+    if "youtube" in sources:
+        tasks.append(("youtube", primary))
 
-            candidate.score = score_candidate(candidate, parsed, expected_duration)
-            seen[key] = candidate
+    def run(task):
 
-        if seen and max(item.score for item in seen.values()) >= 0.8:
-            break
+        kind, query = task
+
+        try:
+            if kind == "itunes":
+                return search_itunes(query, limit=limit)
+
+            return search_youtube(query, limit=limit)
+
+        except Exception:  # noqa: BLE001 - a dead source must not kill the resolve
+            return []
+
+    results: list[Candidate] = []
+
+    with ThreadPoolExecutor(max_workers=len(tasks) or 1) as pool:
+        for batch in pool.map(run, tasks):
+            results.extend(batch)
+
+    seen: dict[tuple[str, str], Candidate] = {}
+
+    for candidate in results:
+        key = (candidate.artist.lower(), candidate.title.lower())
+
+        if key in seen:
+            continue
+
+        candidate.score = score_candidate(candidate, parsed, expected_duration)
+        seen[key] = candidate
 
     ranked = sorted(seen.values(), key=lambda item: item.score, reverse=True)
     return [candidate for candidate in ranked if candidate.score >= minimum_score]
 
 
-def lookup_preview(filename: str, expected_duration: float = 0.0) -> Candidate | None:
-    matches = resolve(filename, expected_duration=expected_duration)
+def lookup_preview(filename: str, expected_duration: float = 0.0,
+                   sources: tuple[str, ...] = ("itunes", "youtube")) -> Candidate | None:
+    matches = resolve(filename, expected_duration=expected_duration, sources=sources)
     return matches[0] if matches else None

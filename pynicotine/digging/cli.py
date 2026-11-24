@@ -147,11 +147,16 @@ def cmd_preview(args) -> int:
         sys.stderr.write("no catalogue match for this filename\n")
         return 1
 
-    print(f"matched: {best.label} ({best.duration:.0f}s, score {best.score:.2f})")
+    print(f"matched [{best.source}]: {best.label} ({best.duration:.0f}s, score {best.score:.2f})")
+
+    stream = best.preview_url
+
+    if best.source == "youtube":
+        stream = match.youtube_stream(best)
 
     playback = player.Player()
     playback.volume = max(0.0, min(1.0, args.volume))
-    duration = playback.load(best.preview_url, start=args.start, duration=args.seconds)
+    duration = playback.load(stream, start=args.start, duration=args.seconds)
     print(f"playing {duration:.1f}s from {args.start:.1f}s ...")
     playback.play()
 
