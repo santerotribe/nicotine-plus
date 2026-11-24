@@ -35,6 +35,23 @@ templates, and [ableton.py](../pynicotine/digging/ableton.py) then:
 - picks a sensible warp mode per stem (drums -> Beats, bass -> Tones,
   tonal material -> Complex Pro)
 
+## Auditioning: catalogue first, peer second
+
+Soulseek has no streaming: bytes only arrive from one peer, through their
+queue. So a click first tries to identify the track against a public
+catalogue (iTunes Search, no token, 30 s official preview) and streams that
+instantly, with a full waveform and instant seeking. Only when there is no
+match -- white labels, promos, edits -- do we fall back to a ranged peer
+fetch (a 1.5 MB window via FileOffset, 6 s budget before moving on).
+
+```sh
+python -m pynicotine.digging match "01 Ruggier - Long Ride (Original Mix).aiff"
+python -m pynicotine.digging preview "01 Ruggier - Long Ride (Original Mix).aiff" --seconds 20
+```
+
+Playback uses PortAudio (`sounddevice`) so the app owns the buffer: instant
+seeks, sample-accurate playhead for the waveform, no external player.
+
 ## Setup
 
 ### MVSEP

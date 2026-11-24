@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 
 from pathlib import Path
 
@@ -120,6 +121,53 @@ def cmd_run(args) -> int:
     return 0
 
 
+def cmd_match(args) -> int:
+    from pynicotine.digging.audition import match
+
+    parsed = match.parse_filename(args.filename)
+    matches = match.resolve(args.filename, expected_duration=args.duration or 0.0)
+    print(json.dumps({
+        "parsed": {"artist": parsed.artist, "title": parsed.title},
+        "matches": [
+            {"artist": item.artist, "title": item.title, "album": item.album,
+             "duration": round(item.duration, 1), "score": round(item.score, 3),
+             "preview": item.preview_url}
+            for item in matches
+        ],
+    }, indent=2))
+    return 0
+
+
+def cmd_preview(args) -> int:
+    from pynicotine.digging.audition import match, player
+
+    best = match.lookup_preview(args.filename, expected_duration=args.duration or 0.0)
+
+    if best is None:
+        sys.stderr.write("no catalogue match for this filename\n")
+        return 1
+
+    print(f"matched: {best.label} ({best.duration:.0f}s, score {best.score:.2f})")
+
+    playback = player.Player()
+    playback.volume = max(0.0, min(1.0, args.volume))
+    duration = playback.load(best.preview_url, start=args.start, duration=args.seconds)
+    print(f"playing {duration:.1f}s from {args.start:.1f}s ...")
+    playback.play()
+
+    try:
+        while playback.is_playing:
+            time.sleep(0.1)
+
+    except KeyboardInterrupt:
+        pass
+
+    finally:
+        playback.stop()
+
+    return 0
+
+
 def cmd_settings(args) -> int:
     settings = DiggingSettings.load()
 
@@ -205,6 +253,21 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--out-dir", dest="out_dir")
     run_parser.add_argument("--no-open", action="store_true")
     run_parser.set_defaults(func=cmd_run)
+
+    match_parser = subparsers.add_parser("match", help="identify a filename against the iTunes catalogue")
+    match_parser.add_argument("filename")
+    match_parser.add_argument("--duration", type=float, default=0.0,
+                              help="known track length in seconds, improves scoring")
+    match_parser.set_defaults(func=cmd_match)
+
+    preview_parser = subparsers.add_parser("preview", help="stream the catalogue preview of a filename")
+    preview_parser.add_argument("filename")
+    preview_parser.add_argument("--seconds", type=float, default=30.0)
+    preview_parser.add_argument("--start", type=float, default=0.0)
+    preview_parser.add_argument("--volume", type=float, default=0.7)
+    preview_parser.add_argument("--duration", type=float, default=0.0,
+                                help="known track length in seconds, improves scoring")
+    preview_parser.set_defaults(func=cmd_preview)
 
     settings_parser = subparsers.add_parser("settings", help="show or change digging settings")
     settings_parser.add_argument("action", choices=("show", "set"))
