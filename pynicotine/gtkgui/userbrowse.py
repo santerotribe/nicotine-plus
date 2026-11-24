@@ -362,18 +362,19 @@ class UserBrowse:
                     "sort_column": "length_data"
                 },
 
+                # Hidden data columns
+                "size_data": {"data_type": GObject.TYPE_UINT64},
+                "bitrate_data": {"data_type": GObject.TYPE_UINT},
+                "length_data": {"data_type": GObject.TYPE_UINT},
+                "file_attributes_data": {"data_type": GObject.TYPE_PYOBJECT},
+
+                # Play glyph, kept last so existing row value order is unchanged
                 "playback": {
                     "column_type": "icon",
                     "title": "",
                     "width": 30,
                     "hide_header": True
-                },
-
-                # Hidden data columns
-                "size_data": {"data_type": GObject.TYPE_UINT64},
-                "bitrate_data": {"data_type": GObject.TYPE_UINT},
-                "length_data": {"data_type": GObject.TYPE_UINT},
-                "file_attributes_data": {"data_type": GObject.TYPE_PYOBJECT}
+                }
             }
         )
 
