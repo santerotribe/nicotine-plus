@@ -407,9 +407,10 @@ the window background is the canvas colour, so no system grey shows at the edges
 
 ## 14. Palettes (`DIG_SKIN`)
 
-Two palettes share one structure; `DIG_SKIN=suno` selects the second at launch.
+Two palettes share one structure. **Suno's is the default**; `DIG_SKIN=arca`
+selects the original graphite-and-lemon palette at launch.
 
-| Token | `arca` (default) | `suno` |
+| Token | `suno` (default) | `arca` (legacy) |
 |---|---|---|
 | canvas | `#1A1D1F` | `#0B0B0D` |
 | chrome / base | `#1C1E20` | `#101012` |
@@ -427,10 +428,11 @@ The Suno palette comes from their shipped CSS: base `#101012`, warm ink
 `#F7F4EF`, and the antique metallics `#C4A670` / `#D4A54A` (their brand pink
 `#DE1677` is deliberately not used — one accent only). It reads quieter and
 blacker than arca's graphite; the structure, type and materials are identical.
-
-![arca palette](assets/palette-arca-2026-11-25.png)
-*arca: graphite surfaces, lemon gold.*
+The lit key keeps a light core (`#EFD6A2`) so dark ink still reads on it.
 
 ![suno palette](assets/palette-suno-2026-11-25.png)
-*suno: near-black surfaces, antique gold.*
+*suno (default): near-black surfaces, antique gold.*
+
+![arca palette](assets/palette-arca-2026-11-25.png)
+*arca (legacy): graphite surfaces, lemon gold.*
 
