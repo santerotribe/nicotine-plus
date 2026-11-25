@@ -322,6 +322,12 @@ NICOTINE_API_URL=http://127.0.0.1:8766 NICOTINE_API_TOKEN=devtoken native/DigApp
 native/DigApp/run.sh
 ```
 
+Controls were rebuilt in the 2026-11-25 hardware pass: caps, milled wells,
+lit primary keys, LEDs and knurled grips, derived from the synthRef *UI Mother*
+archive. The rules and the reference sheet are in
+[UI-DIRECTION.md §12](UI-DIRECTION.md) and
+`docs/assets/ui-references-2026-11-25.png`.
+
 What works: paged browse (peers → folders → files, Enter auditions, ↑/↓ moves),
 the persistent instrument transport, AVAudioEngine playback from
 `/audition` (local share, peer partial, or a catalogue URL downloaded once),

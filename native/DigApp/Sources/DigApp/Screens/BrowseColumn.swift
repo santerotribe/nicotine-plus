@@ -15,14 +15,14 @@ struct BrowseColumn: View {
                 DigSearchField(placeholder: "Filter peers", text: $model.browse.filter)
 
                 Button {
+                    if let user = model.browse.selectedUser {
+                        Task { await model.browse.browse(user: user) }
+                    }
                 } label: {
                     Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(Theme.textSecondary)
-                        .frame(width: 24, height: 24)
                 }
-                .buttonStyle(.plain)
-                .help("Refresh")
+                .buttonStyle(DigIconKeyStyle(diameter: 26))
+                .help("Re-browse this peer")
             }
             .padding(.horizontal, 12)
             .frame(height: 44)
@@ -132,7 +132,18 @@ struct PeerRow: View {
             }
             .padding(.horizontal, 12)
             .frame(height: 56)
-            .background(isSelected ? Theme.bgRowSelected : (hover ? Theme.bgHover : .clear))
+            .background {
+                if isSelected {
+                    WellSurface(radius: 0, tint: Theme.accent.opacity(0.05))
+                } else if hover {
+                    Color.white.opacity(0.03)
+                }
+            }
+            .overlay(alignment: .leading) {
+                if isSelected {
+                    Rectangle().fill(Theme.accent).frame(width: 2)
+                }
+            }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

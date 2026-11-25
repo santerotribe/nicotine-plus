@@ -207,7 +207,18 @@ struct FolderRowView: View {
             .padding(.leading, 12 + CGFloat(min(folder.depth, 6)) * 12)
             .padding(.trailing, 12)
             .frame(height: 32)
-            .background(isSelected ? Theme.bgRowSelected : (hover ? Theme.bgHover : .clear))
+            .background {
+                if isSelected {
+                    WellSurface(radius: 0, tint: Theme.accent.opacity(0.05))
+                } else if hover {
+                    Color.white.opacity(0.03)
+                }
+            }
+            .overlay(alignment: .leading) {
+                if isSelected {
+                    Rectangle().fill(Theme.accent).frame(width: 2)
+                }
+            }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -230,16 +241,31 @@ struct FileRowView: View {
             Button(action: onPlay) {
                 Image(systemName: isPlaying ? "pause.fill" : "play.fill")
                     .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(isPlaying ? Theme.accent : Theme.textTertiary)
+                    .foregroundStyle(isPlaying ? Material.litInk : Theme.textTertiary)
                     .frame(width: 22, height: 22)
-                    .background(Circle().fill(hover || isSelected ? Theme.bgElevated : .clear))
+                    .background {
+                        if isPlaying {
+                            Circle().fill(
+                                LinearGradient(colors: [Material.litCore, Material.litMid],
+                                               startPoint: .top, endPoint: .bottom)
+                            )
+                        } else if hover || isSelected {
+                            Circle().fill(Theme.bgElevated)
+                        }
+                    }
+                    .overlay {
+                        if isPlaying {
+                            Circle().strokeBorder(Color.black.opacity(0.35), lineWidth: 1)
+                        }
+                    }
             }
             .buttonStyle(.plain)
             .opacity(hover || isSelected || isPlaying ? 1 : 0.55)
+            .help("Audition")
 
             Text(file.name)
                 .font(Theme.sans(13, .medium))
-                .foregroundStyle(isSelected ? Theme.textPrimary : Theme.textSecondary)
+                .foregroundStyle(isPlaying ? Theme.accent : (isSelected ? Theme.textPrimary : Theme.textSecondary))
                 .lineLimit(1)
 
             Spacer(minLength: 6)
@@ -261,7 +287,18 @@ struct FileRowView: View {
         }
         .padding(.horizontal, 16)
         .frame(height: Theme.rowHeight)
-        .background(isSelected ? Theme.bgRowSelected : (hover ? Theme.bgHover : .clear))
+        .background {
+            if isSelected {
+                WellSurface(radius: 0, tint: Theme.accent.opacity(0.05))
+            } else if hover {
+                Color.white.opacity(0.045)
+            }
+        }
+        .overlay(alignment: .leading) {
+            if isSelected {
+                Rectangle().fill(Theme.accent).frame(width: 2)
+            }
+        }
         .contentShape(Rectangle())
         .onHover { hover = $0 }
         .onTapGesture(count: 2) { onPlay() }

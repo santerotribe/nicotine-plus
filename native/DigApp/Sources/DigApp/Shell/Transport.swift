@@ -43,23 +43,35 @@ struct Transport: View {
                     onSeek: { fraction in model.player.seek(to: fraction * duration) }
                 )
                 .frame(height: 22)
+                .padding(.horizontal, 6)
+                .background(WellSurface(radius: Theme.radiusPad))
 
                 Text(TimeFormat.clock(position) + " / " + TimeFormat.clock(duration))
                     .font(Theme.mono(11))
                     .foregroundStyle(Theme.textTertiary)
                     .monospacedDigit()
+                    .padding(.horizontal, 8)
+                    .frame(height: 22)
+                    .background(WellSurface(radius: Theme.radiusPad))
 
                 Spacer(minLength: 4)
 
                 if model.audition.sessionID != nil {
                     keepKey
+
+                    Rectangle()
+                        .fill(Color.black.opacity(0.45))
+                        .frame(width: 1, height: 20)
+                        .overlay(Rectangle().fill(Color.white.opacity(0.04)).offset(x: 1))
+
                     dragHandle
                     closeKey
                 }
             }
             .padding(.horizontal, 12)
             .frame(height: Theme.transportHeight)
-            .background(Theme.bgBase)
+            .background(Material.chrome)
+            .overlay(alignment: .top) { PanelRim() }
             .id(timeline.date.timeIntervalSince1970)
         }
     }
@@ -90,12 +102,10 @@ struct Transport: View {
         } label: {
             Image(systemName: model.player.isPlaying ? "pause.fill" : "play.fill")
                 .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(Theme.textPrimary)
-                .frame(width: 30, height: 30)
-                .background(Circle().fill(Theme.bgControl))
-                .overlay(Circle().strokeBorder(Theme.borderMedium, lineWidth: 1))
+                .offset(x: model.player.isPlaying ? 0 : 0.5)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(DigIconKeyStyle(diameter: 32, isOn: model.player.isPlaying,
+                                     activeInk: Theme.accent))
         .help(model.player.isPlaying ? "Pause" : "Play")
     }
 
@@ -110,6 +120,7 @@ struct Transport: View {
         .buttonStyle(DigPrimaryKeyStyle())
         .disabled(model.audition.isKept)
         .opacity(model.audition.isKept ? 0.55 : 1)
+        .help(model.audition.isKept ? "Already in the crate" : "Add to the crate and separate")
     }
 
     private var dragHandle: some View {
@@ -119,16 +130,18 @@ struct Transport: View {
                 DragOutHandle(fileURL: url)
             }
 
-            HStack(spacing: 6) {
+            HStack(spacing: 7) {
                 Image(systemName: "square.and.arrow.up")
                     .font(.system(size: 11, weight: .medium))
                 InstrumentLabel(text: "Drag", color: Theme.textSecondary)
             }
             .allowsHitTesting(false)
+            .frame(width: 84, height: Theme.instrumentKeyHeight)
+            .background(CapSurface(radius: Theme.radiusPad))
+            .overlay(Knurling(spacing: 3, opacity: 0.05).clipShape(
+                RoundedRectangle(cornerRadius: Theme.radiusPad)))
         }
         .frame(width: 84, height: Theme.instrumentKeyHeight)
-        .background(RoundedRectangle(cornerRadius: Theme.radiusPad).fill(Theme.bgControl))
-        .overlay(RoundedRectangle(cornerRadius: Theme.radiusPad).strokeBorder(Theme.border, lineWidth: 1))
         .help(model.player.localFileURL == nil
               ? "The audio is not on disk yet"
               : "Drag into Ableton or Finder")
@@ -141,10 +154,8 @@ struct Transport: View {
         } label: {
             Image(systemName: "xmark")
                 .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(Theme.textTertiary)
-                .frame(width: 26, height: 26)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(DigIconKeyStyle(diameter: 26))
         .help("Close the audition")
     }
 }

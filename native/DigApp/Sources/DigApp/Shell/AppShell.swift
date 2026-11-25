@@ -77,6 +77,10 @@ struct Rail: View {
     var body: some View {
         VStack(spacing: 0) {
             ForEach(AppModel.Section.allCases) { section in
+                if section == .audition || section == .crate || section == .settings {
+                    RailSeparator()
+                }
+
                 RailItem(section: section, isSelected: model.section == section) {
                     model.section = section
                 }
@@ -91,17 +95,14 @@ struct Rail: View {
             } label: {
                 Image(systemName: "plus")
                     .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(Theme.textSecondary)
-                    .frame(width: 32, height: 32)
-                    .background(RoundedRectangle(cornerRadius: Theme.radiusKey).fill(Theme.bgControl))
-                    .overlay(RoundedRectangle(cornerRadius: Theme.radiusKey)
-                        .strokeBorder(Theme.border, lineWidth: 1))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(DigIconKeyStyle(diameter: 32))
             .padding(.bottom, 14)
+            .help("Settings")
         }
         .frame(width: Theme.railWidth)
-        .background(Theme.bgBase)
+        .background(Material.chrome)
+        .overlay(alignment: .top) { PanelRim() }
     }
 
     private var account: some View {
@@ -114,6 +115,23 @@ struct Rail: View {
                 .foregroundStyle(Theme.textTertiary)
         }
         .padding(.bottom, 12)
+    }
+}
+
+/// A section line, the way a hardware panel divides its groups.
+struct RailSeparator: View {
+
+    var body: some View {
+        Rectangle()
+            .fill(
+                LinearGradient(
+                    colors: [.clear, Color.black.opacity(0.5), .white.opacity(0.04), .clear],
+                    startPoint: .leading, endPoint: .trailing
+                )
+            )
+            .frame(height: 1)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 4)
     }
 }
 
@@ -134,17 +152,25 @@ struct RailItem: View {
 
                 Text(section.title)
                     .font(Theme.sans(10, .medium))
-                    .foregroundStyle(isSelected ? Theme.textPrimary : Theme.textTertiary)
+                    .tracking(0.2)
+                    .foregroundStyle(isSelected ? Theme.textPrimary : Theme.textSecondary)
+                    .shadow(color: .black.opacity(0.5), radius: 0, y: 0.5)
             }
             .frame(width: 72, height: Theme.railItemHeight)
-            .background(
-                RoundedRectangle(cornerRadius: Theme.radiusPanel)
-                    .fill(isSelected ? Theme.bgRowSelected : (hover ? Theme.bgHover : .clear))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: Theme.radiusPanel)
-                    .strokeBorder(isSelected ? Theme.border : .clear, lineWidth: 1)
-            )
+            .background {
+                if isSelected {
+                    CapSurface(radius: Theme.radiusPanel)
+                } else if hover {
+                    RoundedRectangle(cornerRadius: Theme.radiusPanel).fill(Theme.bgHover)
+                }
+            }
+            .overlay(alignment: .topTrailing) {
+                if isSelected {
+                    LED(color: Theme.accent, size: 4)
+                        .padding(.top, 7)
+                        .padding(.trailing, 10)
+                }
+            }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -163,36 +189,46 @@ struct TopStrip: View {
         ZStack {
             Text(model.section.title)
                 .font(Theme.sans(13, .semibold))
+                .tracking(0.3)
                 .foregroundStyle(Theme.textPrimary)
+                .shadow(color: .black.opacity(0.5), radius: 0, y: 0.5)
 
             HStack {
+                HStack(spacing: 6) {
+                    LED(isOn: model.isConnected,
+                        color: model.isConnected ? Theme.statusSaved : Theme.statusError,
+                        size: 5)
+
+                    InstrumentLabel(
+                        text: model.isConnected
+                            ? (model.state?.username ?? "CONNECTED")
+                            : (model.supervisor.message),
+                        color: Theme.textMuted
+                    )
+                }
+                .padding(.leading, 12)
+
                 Spacer()
 
-                HStack(spacing: 2) {
+                HStack(spacing: 6) {
                     iconKey("arrow.left.arrow.right", help: "Transfers")
                     iconKey("bell", help: "Activity")
                     iconKey("gearshape", help: "Settings")
                 }
-                .padding(3)
-                .background(RoundedRectangle(cornerRadius: Theme.radiusKey).fill(Theme.bgControl))
-                .overlay(RoundedRectangle(cornerRadius: Theme.radiusKey)
-                    .strokeBorder(Theme.border, lineWidth: 1))
             }
             .padding(.trailing, 12)
         }
         .frame(height: Theme.topStripHeight)
-        .background(Theme.bgBase)
+        .background(Material.chrome)
+        .overlay(alignment: .top) { PanelRim() }
     }
 
     private func iconKey(_ symbol: String, help: String) -> some View {
         Button {
         } label: {
             Image(systemName: symbol)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(Theme.textSecondary)
-                .frame(width: 28, height: 24)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(DigIconKeyStyle(diameter: 26))
         .help(help)
     }
 }

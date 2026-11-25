@@ -55,7 +55,8 @@ struct WaveformView: View {
 
     private func draw(context: inout GraphicsContext, size: CGSize) {
 
-        let barWidth: CGFloat = 1
+        // 2 px bars read as a meter; 1 px reads as a barcode.
+        let barWidth: CGFloat = 2
         let gap: CGFloat = 2
         let stride = barWidth + gap
         let count = max(1, Int(size.width / stride))
@@ -70,16 +71,56 @@ struct WaveformView: View {
             return
         }
 
+        // A hairline through the middle: the reference panels draw their meters
+        // around a zero line, and it keeps sparse waveforms from floating.
+        context.fill(
+            Path(CGRect(x: 0, y: middle - 0.5, width: size.width, height: 1)),
+            with: .color(Color.white.opacity(0.05))
+        )
+
         for index in 0..<count {
-            let fraction = Double(index) / Double(count)
-            let peakIndex = min(peaks.count - 1, Int(fraction * Double(peaks.count)))
-            let amplitude = CGFloat(peaks[peakIndex])
-            let barHeight = max(1, amplitude * (size.height - 4))
+            let start = Double(index) / Double(count)
+            let end = Double(index + 1) / Double(count)
+            let from = min(peaks.count - 1, Int(start * Double(peaks.count)))
+            let to = min(peaks.count - 1, max(from, Int(end * Double(peaks.count))))
+            let slice = (from...to).map { peaks[$0] }
+            let peak = CGFloat(slice.max() ?? 0)
+            let body = CGFloat(slice.reduce(0, +) / Float(slice.count))
             let x = CGFloat(index) * stride
-            let rect = CGRect(x: x, y: middle - barHeight / 2, width: barWidth, height: barHeight)
-            let color = x <= playedX ? Theme.waveAmber : Theme.waveGraphite
+            let isPlayed = x <= playedX
+            let height = max(1, body * (size.height - 6))
+
+            // A meter, not a silhouette: an RMS body with a peak tick above it.
+            let rect = CGRect(x: x, y: middle - height / 2, width: barWidth, height: height)
+            let color = isPlayed ? Material.litMid : Color(hex: 0x3B3E40)
 
             context.fill(Path(rect), with: .color(color))
+
+            if peak > body + 0.06 {
+                let peakHeight = max(1, peak * (size.height - 6))
+                let tick = CGRect(
+                    x: x, y: middle - peakHeight / 2, width: barWidth, height: 1.5
+                )
+                context.fill(
+                    Path(tick),
+                    with: .color(isPlayed ? Material.litCore : Color(hex: 0x74787A))
+                )
+            }
+
+            // The bars just behind the playhead stay lit for a beat of air.
+            if isPlayed && x > playedX - 18 {
+                context.fill(Path(rect), with: .color(Material.litCore.opacity(0.45)))
+            }
+        }
+
+        // Playhead: a 1 px lit line with a faint bloom, like the LEDs on the boards.
+        if progress > 0 && progress < 1 {
+            let line = CGRect(x: playedX, y: 2, width: 1, height: size.height - 4)
+            context.fill(Path(line), with: .color(Material.litCore))
+            context.fill(
+                Path(CGRect(x: playedX - 2, y: 2, width: 5, height: size.height - 4)),
+                with: .color(Material.litMid.opacity(0.12))
+            )
         }
     }
 }

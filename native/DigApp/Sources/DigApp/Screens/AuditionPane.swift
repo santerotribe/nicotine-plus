@@ -107,7 +107,7 @@ struct AuditionPane: View {
                     .fixedSize(horizontal: false, vertical: true)
 
                 HStack(spacing: 8) {
-                    InstrumentLabel(text: sourceBadge(state))
+                    StatusChip(text: sourceBadge(state), color: sourceColor(state))
                     InstrumentLabel(text: state.username)
 
                     if state.kept {
@@ -129,9 +129,12 @@ struct AuditionPane: View {
                     } label: {
                         Label(model.player.isPlaying ? "Pause" : "Play",
                               systemImage: model.player.isPlaying ? "pause.fill" : "play.fill")
+                            .labelStyle(.titleAndIcon)
                     }
-                    .buttonStyle(DigPrimaryKeyStyle())
-                    .frame(width: 96)
+                    .buttonStyle(DigInstrumentKeyStyle(
+                        isOn: model.player.isPlaying,
+                        ledColor: Theme.accent
+                    ))
 
                     Button("Keep") {
                         Task { await model.keep() }
@@ -181,8 +184,19 @@ struct AuditionPane: View {
             }
         }
         .frame(width: compact ? 80 : 96, height: compact ? 80 : 96)
-        .overlay(RoundedRectangle(cornerRadius: Theme.radiusPanel)
-            .strokeBorder(Theme.border, lineWidth: 1))
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.radiusPanel)
+                .strokeBorder(Color.black.opacity(0.6), lineWidth: 1)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.radiusPanel)
+                .strokeBorder(
+                    LinearGradient(colors: [Material.rimTop, .clear, Color.black.opacity(0.35)],
+                                   startPoint: .top, endPoint: .bottom),
+                    lineWidth: 1
+                )
+        )
+        .shadow(color: .black.opacity(0.4), radius: 3, y: 2)
     }
 
     private func facts(state: AuditionState, position: Double) -> some View {
@@ -199,9 +213,7 @@ struct AuditionPane: View {
         }
         .padding(.vertical, 12)
         .padding(.horizontal, 14)
-        .background(RoundedRectangle(cornerRadius: Theme.radiusPanel).fill(Theme.bgCard))
-        .overlay(RoundedRectangle(cornerRadius: Theme.radiusPanel)
-            .strokeBorder(Theme.border, lineWidth: 1))
+        .background(WellSurface(radius: Theme.radiusPanel))
     }
 
     private func fact(_ label: String, _ value: String) -> some View {
@@ -244,11 +256,30 @@ struct AuditionPane: View {
                     }
                     .padding(.horizontal, 12)
                     .frame(height: 30)
-                    .background(RoundedRectangle(cornerRadius: Theme.radiusPad).fill(Theme.bgCard))
-                    .overlay(RoundedRectangle(cornerRadius: Theme.radiusPad)
-                        .strokeBorder(Theme.border, lineWidth: 1))
+                    .background(
+                        WellSurface(
+                            radius: Theme.radiusPad,
+                            tint: match.score >= 0.55 ? Theme.accent.opacity(0.05) : .clear
+                        )
+                    )
+                    .overlay(alignment: .leading) {
+                        if match.score >= 0.55 {
+                            LED(color: Theme.accent, size: 4)
+                                .padding(.leading, 5)
+                        }
+                    }
                 }
             }
+        }
+    }
+
+    private func sourceColor(_ state: AuditionState) -> Color {
+
+        switch state.source?.kind {
+        case .local: return Theme.accent
+        case .peer: return Theme.statusSaved
+        case .catalogue: return Theme.textSecondary
+        case nil: return Theme.textMuted
         }
     }
 

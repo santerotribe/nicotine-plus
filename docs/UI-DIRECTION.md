@@ -314,3 +314,69 @@ licence files, as arca does.
 Open for the next pass: hover/focus rings on every key, a true scrolled-list
 keyboard model (the current one moves selection but does not scroll it into
 view), and a stem lane view under the waveform.
+
+---
+
+## 12. Button and material language (2026-11-25)
+
+The controls were rebuilt from the synthRef *UI Mother* archive
+(`/Volumes/Schema Era/Schema Projects/synthRef/uimother`: 102 UI kits, 696
+screenshots, 818 labelled control cut-outs). The point was not to imitate a
+plugin faceplate — it was to borrow the **lighting grammar** of hardware and
+apply it at low intensity to a Mac app.
+
+![Hardware references: lit caps, recessed pads, extruded keys, brushed caps, LEDs](assets/ui-references-2026-11-25.png)
+
+What each reference contributed: Radiola's **lit key** (light from inside a
+frosted cap, 1 px rim), its **pads** (recess does the work, not a border),
+Hi-Tech's **extruded key** (top light, bottom shade, one saturated accent),
+Hekla's **brushed cap** (a gloss band, engraved legend), Eclyde's **amber LED**
+(darkness first, warmth only when active), PRO-5's **status LED per function**.
+
+### The primitives (`native/DigApp/Sources/DigApp/Materials.swift`)
+
+| Material | Recipe |
+|---|---|
+| Cap | gradient `#2B2E31 → #1B1D1F`, 1 px `black 55%` outer edge, 1 px inner top `white 7%` + bottom `black 35%`; pressed: `#16181A → #1D1F21` with a top inner shadow |
+| Well | `#15171A`, dark inner top edge, light inner bottom edge; used for fields, waveform housing, fact displays, selected rows |
+| Lit cap | `#FFDF9A → #FFC64B → #E2A62F`, gloss band on the upper third, amber bloom (11 pt, 38%), ink `#241A05` |
+| LED | 4–5 px dot, specular highlight, 4 px bloom; on = accent, off = `#35393B` |
+| Knurling | 1 px lines, 3 px apart, 5–7% white, on drag grips |
+| Chrome | 3% vertical gradient `#1F2224 → #191B1D` + 1 px top rim; rail, top strip, transport |
+
+### Hierarchy (a screen may use each level once)
+
+1. **Lit cap** — the single primary action (`Keep`). Gold is never used for a
+   secondary control; the transport's play key is an instrument key with a LED,
+   not a gold cap.
+2. **Instrument key** — mono 10, tracking 1.0, 30 pt, 3 pt radius, optional LED.
+3. **Library key** — Manrope 12 medium, 28 pt, 6 pt radius.
+4. **Icon key** — machined circle, 26/32 pt, LED when holding state.
+5. **Plain glyph** — play glyphs inside rows, search clear, inline links.
+
+### States
+
+- Hover: the cap's top light strengthens; the label goes to `textPrimary`.
+- Pressed: the cap sinks (inverted gradient + top inner shadow), label shadow
+  disappears, icon keys travel 0 px (the shading is the motion).
+- On: the LED lights; the glyph turns amber (transport) or the row's filename
+  turns amber (playing file).
+- Selected row: milled well + a 2 px accent bar on the leading edge.
+- Disabled: 55% opacity, no LED, muted ink.
+
+### Don'ts
+
+No glowing text, no gradients across large surfaces, no drop shadows on rows, no
+coloured chip fills (the colour lives in the LED), no textures or noise, never
+two lit caps on one screen.
+
+### Known next candidates (not done)
+
+- Amber **focus rings** for every key (the keyboard path has no focus cue yet).
+- The play key should fade its LED on state change (100 ms), not snap.
+- A **stems lane** under the waveform once separation lands, with one LED per
+  stem and the same instrument register.
+- Peer queue readout in the transport when the source is queued (mono, amber
+  when it starts moving).
+- Empty states as inset displays with an LED rather than a plain card.
+
