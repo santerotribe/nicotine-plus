@@ -58,6 +58,9 @@ class DigPlayer:
         self._drag_start_x = 0.0
         self._playing_peer = False
         self._status_until = 0.0
+        self._peer_switch_pending = False
+        self._peer_switch_bytes = 0
+        self._peer_loaded_at = 0.0
         self._timer_id = None
         self._token = 0
         self.state_callback = None   # called with (playing: bool) on transport changes
@@ -369,12 +372,30 @@ class DigPlayer:
                 decoder.cancel()
                 return
 
-            if buffer.frames >= int(1.5 * self.player.sample_rate) or buffer.done:
+            if buffer.frames >= int(1.0 * self.player.sample_rate):
+                break
+
+            # A failed or empty decode must not replace working playback
+            if buffer.done:
                 break
 
             _time.sleep(0.05)
 
+        if buffer.frames <= 0:
+            decoder.cancel()
+            GLib.idle_add(self._defer_peer_switch, token)
+            return
+
         GLib.idle_add(self._finish_adopt, buffer, decoder, hint, token)
+
+    def _defer_peer_switch(self, token: int) -> bool:
+
+        if token != self._token:
+            return False
+
+        self._peer_switch_pending = True
+        self._set_status("waiting for the peer to send audio…", sticky_seconds=6)
+        return False
 
     def _finish_adopt(self, buffer, decoder, hint: float, token: int) -> bool:
 
@@ -402,7 +423,10 @@ class DigPlayer:
 
     def _peer_started(self, hint: float) -> None:
 
+        import time as _time
+
         self._playing_peer = True
+        self._peer_loaded_at = _time.monotonic()
         self.player.play()
         self.play_button.set_label("⏸")
         self._start_timer()
@@ -411,6 +435,29 @@ class DigPlayer:
 
         if self.candidate is not None:
             self.match_label.set_text(f"{self.candidate.label}  (catalogue match in background)")
+
+    def _maybe_retry_peer_switch(self) -> None:
+        """Adopt the peer file once it has actually produced audio."""
+
+        peer = self.peer
+
+        if not self._peer_switch_pending or self._playing_peer or peer is None:
+            return
+
+        if not peer.partial_path or peer.bytes <= self._peer_switch_bytes:
+            return
+
+        import time as _time
+
+        now = _time.monotonic()
+
+        if now - getattr(self, "_peer_switch_at", 0.0) < 2.0:
+            return
+
+        self._peer_switch_at = now
+        self._peer_switch_bytes = peer.bytes
+        self._peer_switch_pending = False
+        self._on_peer_audio(peer, self._token)
 
     def _maybe_resume_peer(self) -> None:
         """If the growing peer file stalled playback, pick it up again."""
@@ -460,15 +507,27 @@ class DigPlayer:
 
         now = _time.monotonic()
 
-        if now - self._peer_extend_at < 1.5:
+        # Give a freshly opened decoder time to produce audio: without this the
+        # "playhead is at the edge" check fires immediately after every seek and
+        # restarts ffmpeg in a loop.
+        if now - max(self._peer_extend_at, self._peer_loaded_at) < 3.0:
+            return
+
+        buffer = getattr(self.player, "_buffer", None)
+
+        if buffer is None or buffer.frames < int(1.0 * self.player.sample_rate):
+            return
+
+        if buffer.done:
             return
 
         hint = self.player.duration
         decoded = self.player.buffered_fraction * hint
 
-        if hint and self.player.position > decoded - 2.5 and self.player.position < hint - 0.5:
+        if hint and self.player.position > decoded - 1.0 and self.player.position < hint - 0.5:
             self._peer_extend_at = now
             self.player.load_stream(peer.partial_path, duration_hint=hint, start=self.player.position)
+            self._peer_loaded_at = now
 
     # -- matching ---------------------------------------------------------
 
@@ -972,6 +1031,7 @@ class DigPlayer:
 
         self._update_labels()
         self.waveform.queue_draw()
+        self._maybe_retry_peer_switch()
         self._maybe_extend_peer()
         self._maybe_resume_peer()
 

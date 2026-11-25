@@ -21,7 +21,7 @@ from pynicotine.logfacility import log
 from pynicotine.transfers import TransferStatus
 
 FIRST_AUDIO_BYTES = 1024 * 1024        # ~1 MB is enough to start decoding
-PARTIAL_PLAY_THRESHOLD = 384 * 1024    # don't bother below this
+PARTIAL_PLAY_THRESHOLD = 192 * 1024    # ~6 s of 320 kbps audio: start decoding
 
 
 class PeerPreview:
