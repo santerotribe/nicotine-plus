@@ -353,6 +353,8 @@ blank. The **Browse** field only filters peers; when nothing matches it offers a
 key that copies the term into a network search. Before this, Return did nothing
 and a peer-filter miss looked like a failed search.
 
+![Search results, grouped by peer, first result selected](assets/search-2026-11-25.png)
+
 Build notes (they cost time to learn):
 
 - SwiftPM needs `--disable-sandbox` here (the harness already sandboxes us, and
