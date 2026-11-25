@@ -430,7 +430,12 @@ class Player:
                     self._position = max(0, int(buffered * self.sample_rate))
                 return
 
+            was_playing = self._stream is not None and self._stream.active
             self.load_stream(source, self._duration_hint, start=seconds)
+
+            if was_playing:
+                self.play()
+
             return
 
         with self._lock:

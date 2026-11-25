@@ -61,6 +61,7 @@ class DigPlayer:
         self._peer_switch_pending = False
         self._peer_switch_bytes = 0
         self._peer_loaded_at = 0.0
+        self._user_paused = False
         self._timer_id = None
         self._token = 0
         self.state_callback = None   # called with (playing: bool) on transport changes
@@ -118,7 +119,8 @@ class DigPlayer:
         # waveform would steal the drag and break scrubbing.
         self.drag_handle = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6, visible=True)
         self.drag_handle.set_cursor_from_name("grab")
-        self.drag_handle.set_tooltip_text("Drag into Ableton to import the audio")
+        self.drag_handle.set_tooltip_text(
+            "Drag into Ableton, or use Copy for Live if the drop is refused")
         if GTK_API_VERSION >= 4:
             handle_icon = Gtk.Image.new_from_icon_name("document-send-symbolic")
         else:
@@ -136,7 +138,8 @@ class DigPlayer:
         self.drag_handle.add_controller(drag_source)
         self.drag_source = drag_source
 
-        self.hint_label = Gtk.Label(label="click or drag the waveform to scrub", xalign=0, visible=True)
+        self.hint_label = Gtk.Label(
+            label="click or drag to scrub · ⌘drag / drag handle to export", xalign=0, visible=True)
         self.hint_label.add_css_class("dim-label")
 
         # Cmd-drag anywhere on the waveform also exports the file
@@ -193,9 +196,14 @@ class DigPlayer:
         self.status_label = Gtk.Label(xalign=0, ellipsize=Pango.EllipsizeMode.END, visible=True)
         self.status_label.add_css_class("dim-label")
         self.status_label.set_hexpand(True)
+        self.copy_button = Gtk.Button(label="Copy for Live", visible=True)
+        self.copy_button.set_tooltip_text("Put the audio file on the clipboard, then paste in Ableton")
+        self.copy_button.connect("clicked", self._copy_for_live)
+
         self.export_button = Gtk.Button(label="Reveal file", visible=True)
         self.export_button.connect("clicked", self._on_export_clicked)
         _append(bottom_row, self.status_label)
+        _append(bottom_row, self.copy_button)
         _append(bottom_row, self.export_button)
         _append(outer, bottom_row)
 
@@ -470,6 +478,25 @@ class DigPlayer:
         self._peer_switch_pending = False
         self._on_peer_audio(peer, self._token)
 
+    def _ensure_playing(self) -> None:
+        """Restart playback if the transport stopped without the user asking."""
+
+        if self._user_paused or not self.player.duration or self.player.is_playing:
+            return
+
+        # Sitting at the end of the track is a legitimate stop
+        if self.player.position >= self.player.duration - 0.5:
+            return
+
+        try:
+            self.player.play()
+            self.play_button.set_label("⏸")
+            self._start_timer()
+            self._notify_state()
+
+        except Exception:  # noqa: BLE001
+            return
+
     def _maybe_resume_peer(self) -> None:
         """If the growing peer file stalled playback, pick it up again."""
 
@@ -537,9 +564,17 @@ class DigPlayer:
 
         if should_extend(self.player.position, hint, decoded, buffer.frames,
                          self.player.sample_rate, since_load, buffer.done):
+            was_playing = self.player.is_playing
+            position = self.player.position
+
             self._peer_extend_at = now
-            self.player.load_stream(peer.partial_path, duration_hint=hint, start=self.player.position)
+            self.player.load_stream(peer.partial_path, duration_hint=hint, start=position)
             self._peer_loaded_at = now
+
+            # load_stream() closes the device stream: without this the reload
+            # silently killed playback every time the buffer ran out.
+            if was_playing:
+                self.player.play()
 
     # -- matching ---------------------------------------------------------
 
@@ -654,6 +689,7 @@ class DigPlayer:
         self.status_label.set_text("buffering…")
         self._update_labels()
         self.player.play()
+        self._user_paused = False
         self.play_button.set_label("⏸")
         self._start_timer()
         self._notify_state()
@@ -739,11 +775,13 @@ class DigPlayer:
         try:
             if self.player.is_playing:
                 self.player.pause()
+                self._user_paused = True
                 self.play_button.set_label("▶")
                 self._stop_timer()
 
             else:
                 self.player.play()
+                self._user_paused = False
                 self.play_button.set_label("⏸")
                 self._start_timer()
 
@@ -942,7 +980,11 @@ class DigPlayer:
 
     META_KEYS = (0xFFE7, 0xFFE8, 0xFFEB, 0xFFEC)  # Meta_L/R, Super_L/R
 
-    def _on_key_pressed(self, _controller, keyval, _keycode, _state) -> bool:
+    def _on_key_pressed(self, _controller, keyval, _keycode, state) -> bool:
+
+        if keyval == 0x63 and (state & (Gtk.ModifierType.META_MASK | Gtk.ModifierType.SUPER_MASK)):
+            self._copy_for_live()
+            return True
 
         controllers = list(self.waveform.observe_controllers())
 
@@ -970,6 +1012,33 @@ class DigPlayer:
 
     def _on_drag_end(self, *_args) -> None:
         self.status_label.set_text("ready")
+
+    def _copy_for_live(self, *_args) -> None:
+        """Put the exported file on the macOS clipboard for pasting into a DAW."""
+
+        path = self.export_audio()
+
+        if path is None:
+            self._set_status("nothing decoded yet — wait for audio", sticky_seconds=6)
+            return
+
+        import subprocess
+
+        script = f'set the clipboard to (POSIX file "{path}")'
+
+        try:
+            completed = subprocess.run(["osascript", "-e", script], capture_output=True, check=False)
+
+        except OSError as error:
+            self._set_status(f"could not copy: {error}", sticky_seconds=8)
+            return
+
+        if completed.returncode != 0:
+            detail = (completed.stderr or b"").decode("utf-8", "replace")[:120]
+            self._set_status(f"could not copy: {detail}", sticky_seconds=8)
+            return
+
+        self._set_status(f"copied {path.name} — press ⌘V in Live", sticky_seconds=8)
 
     def _on_export_clicked(self, *_args) -> None:
 
@@ -1111,6 +1180,7 @@ class DigPlayer:
         self._maybe_retry_peer_switch()
         self._maybe_extend_peer()
         self._maybe_resume_peer()
+        self._ensure_playing()
 
         if _time.monotonic() < self._status_until:
             return True
