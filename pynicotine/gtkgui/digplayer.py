@@ -64,6 +64,8 @@ class DigPlayer:
         self._peer_loaded_at = 0.0
         self._user_paused = False
         self._drag_overlay = None
+        self._waveform_overlay = None
+        self._command_held = False
         self._timer_id = None
         self._token = 0
         self.state_callback = None   # called with (playing: bool) on transport changes
@@ -138,7 +140,7 @@ class DigPlayer:
         self.drag_handle.add_controller(drag_click)
 
         self.hint_label = Gtk.Label(
-            label="click or drag to scrub · press and drag the handle into Ableton", xalign=0, visible=True)
+            label="click or drag to scrub · ⌘-drag the waveform or the handle into Ableton", xalign=0, visible=True)
         self.hint_label.add_css_class("dim-label")
 
         # Cmd-drag anywhere on the waveform also exports the file
@@ -254,6 +256,16 @@ class DigPlayer:
             from pynicotine.digging.nativedrag import attach
 
             self._drag_overlay = attach(self.window, self.drag_handle, self.export_audio)
+
+        if self._waveform_overlay is None:
+            from pynicotine.digging.nativedrag import attach
+
+            # Cmd-drag anywhere on the waveform exports it; the invisible child
+            # window only exists while Cmd is held, so scrubbing is untouched.
+            self._waveform_overlay = attach(
+                self.window, self.waveform, self.export_audio,
+                enabled=lambda: self._command_held,
+            )
 
     def load(self, filename: str, duration_hint: float = 0.0, source_path: str = "",
              source=None) -> None:
@@ -765,6 +777,10 @@ class DigPlayer:
             self._drag_overlay.detach()
             self._drag_overlay = None
 
+        if self._waveform_overlay is not None:
+            self._waveform_overlay.detach()
+            self._waveform_overlay = None
+
         try:
             self._cache().enforce()
 
@@ -1035,13 +1051,23 @@ class DigPlayer:
 
     def _on_key_pressed(self, _controller, keyval, _keycode, state) -> bool:
 
+        if keyval in self.META_KEYS:
+            self._command_held = True
+            self.waveform.set_cursor_from_name("grab")
+            return False
+
         if keyval == 0x63 and (state & (Gtk.ModifierType.META_MASK | Gtk.ModifierType.SUPER_MASK)):
             self._copy_for_live()
             return True
 
         return False
 
-    def _on_key_released(self, _controller, _keyval, _keycode, _state) -> bool:
+    def _on_key_released(self, _controller, keyval, _keycode, _state) -> bool:
+
+        if keyval in self.META_KEYS:
+            self._command_held = False
+            self.waveform.set_cursor_from_name("pointer")
+
         return False
 
     def _on_drag_begin(self, *_args) -> None:

@@ -90,10 +90,11 @@ if AVAILABLE:
 class NativeDragOverlay:
     """A transparent child NSWindow aligned with a GTK widget."""
 
-    def __init__(self, gtk_window, handle_widget, provider) -> None:
+    def __init__(self, gtk_window, handle_widget, provider, enabled=None) -> None:
         self.gtk_window = gtk_window
         self.handle = handle_widget
         self.provider = provider
+        self.enabled = enabled
         self.view = None
         self.ns_window = None
         self.child = None
@@ -161,6 +162,10 @@ class NativeDragOverlay:
             self.child.orderOut_(None)
             return True
 
+        if self.enabled is not None and not self.enabled():
+            self.child.orderOut_(None)
+            return True
+
         try:
             if not self.gtk_window.is_active():
                 # Do not leave an invisible click-catcher floating over other apps
@@ -218,14 +223,14 @@ class NativeDragOverlay:
         self.view = None
 
 
-def attach(gtk_window, handle_widget, provider) -> NativeDragOverlay | None:
+def attach(gtk_window, handle_widget, provider, enabled=None) -> NativeDragOverlay | None:
     """Best-effort: return an overlay, or None when PyObjC is unavailable."""
 
     if not AVAILABLE:
         return None
 
     try:
-        overlay = NativeDragOverlay(gtk_window, handle_widget, provider)
+        overlay = NativeDragOverlay(gtk_window, handle_widget, provider, enabled=enabled)
 
     except Exception:  # noqa: BLE001
         return None
