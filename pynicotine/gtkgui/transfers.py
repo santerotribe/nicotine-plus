@@ -656,7 +656,15 @@ class Transfers:
         if column_ids:
             self.tree_view.set_row_values(iterator, column_ids, column_values)
 
+    def is_transfer_hidden(self, transfer) -> bool:
+        """Subclasses can keep internal transfers out of the list."""
+
+        return False
+
     def update_specific(self, transfer, select_parent=False, use_reverse_file_path=True):
+
+        if self.is_transfer_hidden(transfer):
+            return False
 
         current_byte_offset = transfer.current_byte_offset or 0
         queue_position = transfer.queue_position

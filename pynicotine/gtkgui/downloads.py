@@ -26,6 +26,30 @@ from pynicotine.utils import open_folder_path
 
 class Downloads(Transfers):
 
+    def is_transfer_hidden(self, transfer) -> bool:
+        """Preview downloads belong to the Dig player, not the Downloads tab."""
+
+        folder = getattr(transfer, "folder_path", "") or ""
+
+        if not folder:
+            return False
+
+        try:
+            from pathlib import Path
+
+            previews = getattr(self, "_digging_preview_folder", None)
+
+            if previews is None:
+                from pynicotine.digging.settings import DiggingSettings
+
+                previews = str(DiggingSettings.load().work_path / "previews")
+                self._digging_preview_folder = previews
+
+            return Path(folder).resolve() == Path(previews).resolve()
+
+        except Exception:  # noqa: BLE001 - never hide transfers because of a config error
+            return False
+
     def __init__(self, window):
 
         self.retry_label = _("_Resume")

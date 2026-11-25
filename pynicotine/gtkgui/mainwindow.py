@@ -272,6 +272,10 @@ class MainWindow(Window):
         self.userinfo = UserInfos(self)
         self.userbrowse = UserBrowses(self)
 
+        from pynicotine.gtkgui.crateview import CrateView
+
+        self.crate = CrateView(self)
+
         self.tabs = {
             "chatrooms": self.chatrooms,
             "downloads": self.downloads,
@@ -281,7 +285,8 @@ class MainWindow(Window):
             "uploads": self.uploads,
             "userbrowse": self.userbrowse,
             "userinfo": self.userinfo,
-            "userlist": self.buddies
+            "userlist": self.buddies,
+            "crate": self.crate
         }
 
         # Actions and menu
@@ -797,6 +802,7 @@ class MainWindow(Window):
         for tab_id, tab_text, tab_icon_name in (
             ("search", _("Search Files"), "system-search-symbolic"),
             ("downloads", _("Downloads"), "folder-download-symbolic"),
+            ("crate", _("Crate"), "folder-music-symbolic"),
             ("uploads", _("Uploads"), "emblem-shared-symbolic"),
             ("userbrowse", _("Browse Shares"), "folder-symbolic"),
             ("userinfo", _("User Profiles"), "avatar-default-symbolic"),

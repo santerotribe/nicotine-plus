@@ -3746,6 +3746,9 @@ class PluginsPage:
             self.on_show_plugin_settings()
 
 
+from pynicotine.gtkgui.digprefs import DiggingPage
+
+
 class Preferences(Dialog):
 
     def __init__(self, application):
@@ -3787,6 +3790,7 @@ class Preferences(Dialog):
             ("shares", SharesPage, _("Shares"), "folder-symbolic"),
             ("downloads", DownloadsPage, _("Downloads"), "folder-download-symbolic"),
             ("uploads", UploadsPage, _("Uploads"), "emblem-shared-symbolic"),
+            ("digging", DiggingPage, _("Digging"), "folder-music-symbolic"),
             ("searches", SearchesPage, _("Searches"), "system-search-symbolic"),
             ("user-profile", UserProfilePage, _("User Profile"), "avatar-default-symbolic"),
             ("chats", ChatsPage, _("Chats"), "insert-text-symbolic"),
