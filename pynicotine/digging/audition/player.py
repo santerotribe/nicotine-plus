@@ -192,6 +192,10 @@ class Player:
                 self._fade = None
                 incoming_gain = 1.0
 
+            # Stop the outgoing decoder: it has served its frames
+            if self._decoder is not None and self._decoder is not decoder:
+                self._decoder.cancel()
+
             self._buffer = buffer
             self._decoder = decoder
             self._audio = None
@@ -281,13 +285,18 @@ class Player:
         if self._buffer is None:
             return []
 
-        frames = self._buffer.frames
+        import time as _time
 
-        if self._peaks_cache is not None and frames == self._peaks_frames:
+        frames = self._buffer.frames
+        now = _time.monotonic()
+        last_time = getattr(self, "_peaks_time", 0.0)
+
+        if self._peaks_cache is not None and (frames == self._peaks_frames or now - last_time < 0.25):
             return self._peaks_cache
 
-        self._peaks_cache = peaks(self._buffer.snapshot(), buckets)
+        self._peaks_cache = self._buffer.peaks(buckets)
         self._peaks_frames = frames
+        self._peaks_time = now
         return self._peaks_cache
 
     @property
@@ -357,11 +366,18 @@ class Player:
             self._fade = None
             self._adopt_gain = 1.0
 
-    def seek(self, seconds: float) -> None:
+    def seek(self, seconds: float, reload: bool = True) -> None:
         """Seek within decoded audio, restarting the stream past what is buffered."""
 
         if self._buffer is not None:
             buffered = self._buffer.duration
+
+            if seconds > buffered and not reload and not self._buffer.done:
+                # Mid-drag: stay inside what we have instead of thrashing ffmpeg
+                with self._lock:
+                    self._position = max(0, int(buffered * self.sample_rate))
+
+                return
 
             if seconds <= buffered or self._buffer.done:
                 with self._lock:

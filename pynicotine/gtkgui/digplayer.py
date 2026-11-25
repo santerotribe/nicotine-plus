@@ -97,21 +97,43 @@ class DigPlayer:
         self.waveform.add_controller(click)
 
         drag = Gtk.GestureDrag()
+        drag.connect("drag-begin", self._on_waveform_drag_begin)
         drag.connect("drag-update", self._on_waveform_drag)
+        drag.connect("drag-end", self._on_waveform_drag_end)
         self.waveform.add_controller(drag)
+
+        _append(outer, self.waveform)
+
+        hint_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10, visible=True)
+
+        # Dragging out to a DAW needs its own handle: a DragSource on the
+        # waveform would steal the drag and break scrubbing.
+        self.drag_handle = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6, visible=True)
+        self.drag_handle.set_cursor_from_name("grab")
+        self.drag_handle.set_tooltip_text("Drag into Ableton to import the audio")
+        if GTK_API_VERSION >= 4:
+            handle_icon = Gtk.Image.new_from_icon_name("document-send-symbolic")
+        else:
+            handle_icon = Gtk.Image.new_from_icon_name("document-send-symbolic", Gtk.IconSize.BUTTON)
+
+        handle_icon.set_visible(True)
+        handle_label = Gtk.Label(label="Drag to Ableton", visible=True)
+        _append(self.drag_handle, handle_icon)
+        _append(self.drag_handle, handle_label)
 
         drag_source = Gtk.DragSource(actions=Gdk.DragAction.COPY)
         drag_source.connect("prepare", self._on_drag_prepare)
         drag_source.connect("drag-begin", self._on_drag_begin)
         drag_source.connect("drag-end", self._on_drag_end)
-        self.waveform.add_controller(drag_source)
+        self.drag_handle.add_controller(drag_source)
         self.drag_source = drag_source
 
-        _append(outer, self.waveform)
-
-        self.hint_label = Gtk.Label(label="drag the waveform into Ableton", xalign=0, visible=True)
+        self.hint_label = Gtk.Label(label="click or drag the waveform to scrub", xalign=0, visible=True)
         self.hint_label.add_css_class("dim-label")
-        _append(outer, self.hint_label)
+
+        _append(hint_row, self.drag_handle)
+        _append(hint_row, self.hint_label)
+        _append(outer, hint_row)
 
         controls = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8, visible=True)
 
@@ -766,15 +788,24 @@ class DigPlayer:
     def _on_waveform_click(self, _gesture, _n_press, x, _y) -> None:
         self._seek_fraction(self._fraction_at(x))
 
-    def _on_waveform_drag(self, _gesture, _offset_x, x) -> None:
-        self._seek_fraction(self._fraction_at(x))
+    def _on_waveform_drag_begin(self, _gesture, start_x, _start_y) -> None:
+        self._drag_start_x = start_x
 
-    def _seek_fraction(self, fraction: float) -> None:
+    def _on_waveform_drag(self, _gesture, offset_x, _offset_y) -> None:
+        # drag-update reports displacement since drag-begin, not a position
+        start_x = getattr(self, "_drag_start_x", 0.0)
+        self._seek_fraction(self._fraction_at(start_x + offset_x), reload=False)
+
+    def _on_waveform_drag_end(self, _gesture, offset_x, _offset_y) -> None:
+        start_x = getattr(self, "_drag_start_x", 0.0)
+        self._seek_fraction(self._fraction_at(start_x + offset_x), reload=True)
+
+    def _seek_fraction(self, fraction: float, reload: bool = True) -> None:
 
         if not self.player.duration:
             return
 
-        self.player.seek(fraction * self.player.duration)
+        self.player.seek(fraction * self.player.duration, reload=reload)
         self._update_labels()
         self.waveform.queue_draw()
 

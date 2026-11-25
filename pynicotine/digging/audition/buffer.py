@@ -105,6 +105,32 @@ class AudioBuffer:
 
         return (self.base_frames + self.frames) / self.sample_rate
 
+    def peaks(self, buckets: int = 900) -> list[float]:
+        """Normalised peaks without copying the whole buffer (strided reads)."""
+
+        import numpy as np
+
+        with self._lock:
+            frames = self._frames
+            data = self._data
+
+            if frames <= 0:
+                return []
+
+            chunk = max(1, frames // max(1, buckets))
+            count = max(1, min(buckets, frames // chunk))
+            step = max(1, chunk // 96)
+            values = []
+
+            for index in range(count):
+                block = data[index * chunk:(index + 1) * chunk:step]
+
+                if len(block):
+                    values.append(float(np.abs(block).max()))
+
+        peak = max(values) or 1.0
+        return [round(value / peak, 4) for value in values]
+
     def snapshot(self):
         """Contiguous copy of the buffered audio (for peak extraction/export)."""
 
