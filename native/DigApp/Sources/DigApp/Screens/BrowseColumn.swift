@@ -45,16 +45,39 @@ struct BrowseColumn: View {
             }
 
             if filteredUsers.isEmpty {
-                VStack(spacing: 6) {
-                    Text("No peers yet")
-                        .font(Theme.sans(12, .medium))
-                        .foregroundStyle(Theme.textSecondary)
-                    Text("Type a Soulseek username below.")
-                        .font(Theme.sans(11))
-                        .foregroundStyle(Theme.textMuted)
+                VStack(spacing: 8) {
+                    if model.browse.filter.isEmpty {
+                        Text("No peers yet")
+                            .font(Theme.sans(12, .medium))
+                            .foregroundStyle(Theme.textSecondary)
+                        Text("Type a Soulseek username below.")
+                            .font(Theme.sans(11))
+                            .foregroundStyle(Theme.textMuted)
+                    } else {
+                        HStack(spacing: 6) {
+                            LED(color: Theme.textMuted, size: 4)
+                            InstrumentLabel(text: "NO PEER MATCHES")
+                        }
+
+                        Text("“(model.browse.filter)” filters the peer list, not the network.")
+                            .font(Theme.sans(11))
+                            .foregroundStyle(Theme.textMuted)
+                            .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.horizontal, 16)
+
+                        Button("Search the network") {
+                            let term = model.browse.filter
+                            model.search.term = term
+                            model.section = .search
+                            Task { await model.search.run() }
+                        }
+                        .buttonStyle(DigKeyStyle(dense: true))
+                        .amberFocus()
+                    }
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 28)
+                .padding(.vertical, 24)
             }
 
             Divider().overlay(Theme.border)

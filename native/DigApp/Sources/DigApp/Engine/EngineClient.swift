@@ -86,8 +86,10 @@ struct EngineClient {
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
 
             guard (200..<300).contains(status) else {
-                let message = String(data: data, encoding: .utf8) ?? "no body"
-                throw EngineError.badStatus(status, message)
+                // The API answers {"error": "..."} — surface that, not raw JSON.
+                let body = String(data: data, encoding: .utf8) ?? "no body"
+                let detail = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+                throw EngineError.badStatus(status, detail?["error"] as? String ?? body)
             }
 
             return data

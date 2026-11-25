@@ -301,6 +301,8 @@ struct DigSearchField: View {
 
     let placeholder: String
     @Binding var text: String
+    var onSubmit: (() -> Void)?
+    var focus: FocusState<Bool>.Binding?
 
     var body: some View {
         HStack(spacing: 8) {
@@ -312,6 +314,9 @@ struct DigSearchField: View {
                 .textFieldStyle(.plain)
                 .font(Theme.sans(12))
                 .foregroundStyle(Theme.textPrimary)
+                .submitLabel(.search)
+                .onSubmit { onSubmit?() }
+                .modifier(OptionalFocus(focus: focus))
 
             if !text.isEmpty {
                 Button {
@@ -327,6 +332,20 @@ struct DigSearchField: View {
         .padding(.horizontal, 10)
         .frame(height: 28)
         .background(WellSurface(radius: Theme.radiusKey))
+    }
+}
+
+/// Applies `.focused` only when a binding exists.
+struct OptionalFocus: ViewModifier {
+
+    var focus: FocusState<Bool>.Binding?
+
+    func body(content: Content) -> some View {
+        if let focus {
+            content.focused(focus)
+        } else {
+            content
+        }
     }
 }
 

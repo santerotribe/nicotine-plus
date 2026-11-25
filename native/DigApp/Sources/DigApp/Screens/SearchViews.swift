@@ -6,11 +6,17 @@ import SwiftUI
 struct SearchColumn: View {
 
     @Bindable var model: AppModel
+    @FocusState private var fieldFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
-                DigSearchField(placeholder: "Search Soulseek", text: $model.search.term)
+                DigSearchField(
+                    placeholder: "Search Soulseek",
+                    text: $model.search.term,
+                    onSubmit: { Task { await model.search.run() } },
+                    focus: $fieldFocused
+                )
 
                 Button("Go") {
                     Task { await model.search.run() }
@@ -21,15 +27,39 @@ struct SearchColumn: View {
             }
             .padding(.horizontal, 12)
             .frame(height: 44)
+            .onAppear { fieldFocused = true }
 
             Divider().overlay(Theme.border)
 
-            if model.search.term.isEmpty && model.search.results.isEmpty {
-                VStack(spacing: 6) {
-                    InstrumentLabel(text: "NO SEARCH YET")
-                    Text("Results stream in while the network answers.")
-                        .font(Theme.sans(11))
-                        .foregroundStyle(Theme.textMuted)
+            if model.search.results.isEmpty {
+                VStack(spacing: 8) {
+                    if !model.search.error.isEmpty {
+                        HStack(spacing: 6) {
+                            LED(isOn: true, color: Theme.statusError, size: 4)
+                            InstrumentLabel(text: "NOTHING CAME BACK", color: Theme.statusError)
+                        }
+
+                        Text(model.search.error)
+                            .font(Theme.sans(11))
+                            .foregroundStyle(Theme.textMuted)
+                            .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.horizontal, 16)
+                    } else if model.search.isSearching {
+                        HStack(spacing: 6) {
+                            LED(color: Theme.accent, size: 4)
+                            InstrumentLabel(text: "SEARCHING…", color: Theme.accent)
+                        }
+
+                        Text("Results stream in as peers answer.")
+                            .font(Theme.sans(11))
+                            .foregroundStyle(Theme.textMuted)
+                    } else {
+                        InstrumentLabel(text: "NO SEARCH YET")
+                        Text("Type a term and press Return.")
+                            .font(Theme.sans(11))
+                            .foregroundStyle(Theme.textMuted)
+                    }
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 28)
@@ -73,7 +103,9 @@ struct SearchColumn: View {
                 InstrumentLabel(text: "\(model.search.results.count) OF \(model.search.total) RESULTS",
                                 color: Theme.textMuted)
                 Spacer()
+
                 if model.search.isSearching {
+                    LED(color: Theme.accent, size: 4)
                     InstrumentLabel(text: "SEARCHING…")
                 }
             }
@@ -234,7 +266,7 @@ struct SearchDetail: View {
             EmptyStatePane(
                 symbol: "magnifyingglass",
                 title: "Search the network",
-                body: "Type a term and press Go. Results are grouped by what the engine stores, paged as they arrive, and auditions start from the row."
+                body: "Type a term and press Return. Peers are grouped as results arrive; pick a row to audition it."
             )
         }
     }

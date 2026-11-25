@@ -99,7 +99,10 @@ final class SearchModel {
 
     func run() async {
 
-        guard let client else { return }
+        guard let client else {
+            error = "The engine is not connected yet. Wait for the status light, then search."
+            return
+        }
 
         let query = term.trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -119,7 +122,8 @@ final class SearchModel {
             var stable = 0
             var lastTotal = -1
 
-            for _ in 0..<20 {
+            // ~24 s ceiling; searches normally settle in two or three ticks.
+            for _ in 0..<30 {
                 try? await Task.sleep(nanoseconds: 800_000_000)
 
                 guard let page = try? await client.searchResults(token: summary.token, offset: 0, limit: 500) else {
@@ -129,16 +133,24 @@ final class SearchModel {
                 results = page.results
                 total = page.total
 
+                if selectedID == nil {
+                    selectedID = results.first?.id
+                }
+
                 if page.total == lastTotal {
                     stable += 1
 
-                    if stable >= 2 {
+                    if stable >= 3 {
                         break
                     }
                 } else {
                     stable = 0
                     lastTotal = page.total
                 }
+            }
+
+            if results.isEmpty {
+                error = "No results. The network can be quiet for white labels and promos; try a shorter term."
             }
 
         } catch {

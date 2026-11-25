@@ -344,7 +344,14 @@ health wait, and a headless check (below).
 ```sh
 DIG_SELFTEST=1 NICOTINE_API_TOKEN=devtoken native/DigApp/run.sh   # PASS/FAIL per step
 DIG_OPEN=santero DIG_AUTO=1 native/DigApp/run.sh                  # browse + audition on launch
+DIG_SEARCH='ruggier long ride' native/DigApp/run.sh               # search on launch
 ```
+
+Search notes: Return in the field submits (same action as Go), the field takes
+focus when the section opens, and an empty result says so instead of staying
+blank. The **Browse** field only filters peers; when nothing matches it offers a
+key that copies the term into a network search. Before this, Return did nothing
+and a peer-filter miss looked like a failed search.
 
 Build notes (they cost time to learn):
 

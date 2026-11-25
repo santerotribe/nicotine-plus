@@ -88,6 +88,14 @@ final class AppModel {
             await browse.select(user: first)
         }
 
+        // A development aid: run a search on launch, so the results list can be
+        // checked without typing.
+        if let term = ProcessInfo.processInfo.environment["DIG_SEARCH"], !term.isEmpty {
+            section = .search
+            search.term = term
+            await search.run()
+        }
+
         // A development aid: audition the first file so the transport and
         // waveform can be checked without clicking.
         if ProcessInfo.processInfo.environment["DIG_AUTO"] == "1",
