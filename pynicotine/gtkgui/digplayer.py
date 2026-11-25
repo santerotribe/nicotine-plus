@@ -963,23 +963,23 @@ class DigPlayer:
         gfile = Gio.File.new_for_path(str(path))
         uri = gfile.get_uri()
 
-        # macOS turns text/uri-list into public.file-url, which is what Live
-        # accepts from Finder. FileList is only a fallback for other toolkits.
+        # Gdk.FileList is the type GTK's macOS backend turns into a file URL
+        # promise. text/uri-list is only a fallback.
         provider = None
 
         try:
-            provider = Gdk.ContentProvider.new_for_bytes(
-                "text/uri-list", GLib.Bytes.new(f"{uri}\r\n".encode()))
+            provider = Gdk.ContentProvider.new_for_value(Gdk.FileList.new_from_array([gfile]))
 
         except Exception as error:  # noqa: BLE001
-            log.add(f"Digging: uri-list provider failed: {error}")
+            log.add(f"Digging: file-list provider failed: {error}")
 
         if provider is None:
             try:
-                provider = Gdk.ContentProvider.new_for_value(Gdk.FileList.new_from_array([gfile]))
+                provider = Gdk.ContentProvider.new_for_bytes(
+                    "text/uri-list", GLib.Bytes.new(f"{uri}\r\n".encode()))
 
             except Exception as error:  # noqa: BLE001
-                log.add(f"Digging: file-list provider failed: {error}")
+                log.add(f"Digging: uri-list provider failed: {error}")
 
         if provider is None:
             self._set_status("could not build a drag payload", sticky_seconds=8)

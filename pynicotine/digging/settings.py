@@ -174,10 +174,20 @@ class DiggingSettings:
 
     @property
     def export_path(self) -> Path:
-        """Visible location for exported WAVs (macOS is happier outside dotfolders)."""
+        """Where exported WAVs go.
+
+        Preference order: explicit setting, Ableton's User Library (so the file
+        shows up in Live's browser without a pasteboard drag), then the digging
+        working folder.
+        """
 
         if self.export_dir:
             return Path(self.export_dir).expanduser()
+
+        library = Path.home() / "Music" / "Ableton" / "User Library"
+
+        if library.is_dir():
+            return library / "Samples" / "Digging"
 
         return self.work_path / "exports"
 
