@@ -246,6 +246,15 @@ final class AppModel {
 
         guard let client else { return }
 
+        // One live session per window: the previous preview is paused and swept
+        // instead of piling up transfers on the engine.
+        if let previous = audition.sessionID {
+            try? await client.closeAudition(id: previous)
+            player.stop()
+            loadedSessionID = ""
+            loadedLocation = ""
+        }
+
         section = .audition
         audition.begin(user: user, folder: folder, file: file)
 
