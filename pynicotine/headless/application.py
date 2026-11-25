@@ -36,6 +36,10 @@ class Application:
         core.init_components(isolated_mode=self.isolated_mode)
         core.start()
 
+        from pynicotine.engineapi import maybe_start
+
+        maybe_start()
+
         if self.is_fallback:
             log.add(_("No graphical environment available, using headless (no GUI) mode"))
 

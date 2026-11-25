@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 
 from concurrent.futures import Future, ProcessPoolExecutor, ThreadPoolExecutor
 from dataclasses import dataclass, field
@@ -61,11 +62,12 @@ class BrowsedUser:
 
 
 class UserBrowse:
-    __slots__ = ("users", "user_shares_folder", "_task_pools")
+    __slots__ = ("users", "user_shares_folder", "_task_pools", "_browse_timing")
 
     def __init__(self):
 
         self.users = {}
+        self._browse_timing: dict[str, dict] = {}
         self.user_shares_folder = os.path.join(config.data_folder_path, "usershares")
         self._task_pools: dict[TaskType, ProcessPoolExecutor | ThreadPoolExecutor] = {}
 
@@ -160,12 +162,83 @@ class UserBrowse:
         for username in self.users.copy():
             self.remove_user(username)
 
+    def user_summary(self, username: str) -> dict | None:
+        """Small snapshot of a browsed user, shared by any front end."""
+
+        browsed_user = self.users.get(username)
+
+        if browsed_user is None:
+            return None
+
+        folders = list(browsed_user.public_folders) or list(browsed_user.private_folders)
+
+        return {
+            "username": username,
+            "folders": browsed_user.num_folders if browsed_user.num_folders is not None else len(folders),
+            "files": browsed_user.num_files or 0,
+            "shared_size": browsed_user.shared_size or 0,
+            "messages": self._browse_timing.get(username, {}).get("messages", 0),
+        }
+
+    def folder_page(self, username: str, offset: int = 0, limit: int = 200) -> dict | None:
+        """Page through a user's folder names without materialising them all."""
+
+        browsed_user = self.users.get(username)
+
+        if browsed_user is None:
+            return None
+
+        folders = list(browsed_user.public_folders) or list(browsed_user.private_folders)
+        total = len(folders)
+        offset = max(0, int(offset))
+        limit = max(1, int(limit))
+        page = folders[offset:offset + limit]
+        counts = {
+            folder: len(browsed_user.public_folders.get(folder) or browsed_user.private_folders.get(folder) or [])
+            for folder in page
+        }
+
+        return {"username": username, "total": total, "offset": offset,
+                "limit": limit, "folders": counts}
+
+    def file_page(self, username: str, folder_path: str = "", offset: int = 0,
+                  limit: int = 500) -> dict | None:
+        """Page through one folder's files. The unit a native list view needs."""
+
+        browsed_user = self.users.get(username)
+
+        if browsed_user is None:
+            return None
+
+        files = (
+            browsed_user.public_folders.get(folder_path)
+            or browsed_user.private_folders.get(folder_path)
+            or []
+        )
+        offset = max(0, int(offset))
+        limit = max(1, int(limit))
+
+        return {
+            "username": username,
+            "folder": folder_path,
+            "total": len(files),
+            "offset": offset,
+            "limit": limit,
+            "files": files[offset:offset + limit],
+        }
+
     def request_user_shares(self, username: str) -> None:
 
         if core.users.login_status == UserStatus.OFFLINE:
             events.emit("shared-file-list-failed", username, is_offline=True)
             return
 
+        self._browse_timing[username] = {
+            "started": time.monotonic(),
+            "messages": 0,
+            "folders": 0,
+            "files": 0,
+        }
         core.send_message_to_network_thread(AddAllowedResponse(SharedFileListResponse, username))
         core.send_message_to_peer(username, SharedFileListRequest())
 
@@ -580,6 +653,25 @@ class UserBrowse:
             browsed_user.num_folders = num_folders
             browsed_user.num_files = num_files
             browsed_user.shared_size = shared_size
+
+            # Browse latency split: how long the peer took to answer, and how
+            # much data arrived per message. Used when tuning large libraries.
+            timing = self._browse_timing.setdefault(
+                username, {"started": time.monotonic(), "messages": 0, "folders": 0, "files": 0}
+            )
+            timing["messages"] += 1
+            timing["folders"] = max(timing["folders"], num_folders)
+            timing["files"] = max(timing["files"], num_files)
+            elapsed = time.monotonic() - timing["started"]
+
+            if timing["messages"] == 1 or elapsed >= 5:
+                log.add(
+                    "Browse: %(user)s answered in %(elapsed).2fs "
+                    "(%(folders)s folders, %(files)s files, message %(messages)s)",
+                    {"user": username, "elapsed": elapsed, "folders": num_folders,
+                     "files": num_files, "messages": timing["messages"]}
+                )
+                timing["started"] = time.monotonic()
 
         core.send_message_to_network_thread(RemoveAllowedResponse(SharedFileListResponse, username))
 

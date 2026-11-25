@@ -1074,6 +1074,14 @@ class Application:
 
         core.start()
 
+        try:
+            from pynicotine.engineapi import maybe_start
+
+            maybe_start()
+
+        except Exception as error:  # noqa: BLE001 - the API is optional
+            log.add(f"Engine API failed to start: {error}")
+
         # Process thread events 10 times per second.
         # High priority to ensure there are no delays.
         GLib.timeout_add(100, self.on_process_thread_events, priority=GLib.PRIORITY_HIGH_IDLE)
