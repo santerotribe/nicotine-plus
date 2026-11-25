@@ -30,6 +30,7 @@ final class EngineSupervisor {
 
     private var process: Process?
     private var spawnedByUs = false
+    private var watchdogTask: Task<Void, Never>?
 
     // MARK: - Configuration
 
@@ -114,7 +115,7 @@ final class EngineSupervisor {
         child.environment = environment
 
         let logURL = Self.logURL()
-        NSLog("DigApp: engine log at %{public}@", logURL.path)
+        NSLog("DigApp: engine log at \(logURL.path)")
 
         if !FileManager.default.fileExists(atPath: logURL.path) {
             FileManager.default.createFile(atPath: logURL.path, contents: nil)
@@ -155,6 +156,9 @@ final class EngineSupervisor {
 
     func stop() {
 
+        watchdogTask?.cancel()
+        watchdogTask = nil
+
         guard spawnedByUs, let process, process.isRunning else { return }
 
         process.terminate()
@@ -167,6 +171,52 @@ final class EngineSupervisor {
         engineVersion = version
         phase = .ready
         message = "Engine \(version)"
+        startWatchdog(client)
+    }
+
+    /// The engine can die under us (it runs an 8-hour share index in a separate
+    /// process). Watch it, and bring a fresh one up if it stops answering.
+    private func startWatchdog(_ client: EngineClient) {
+
+        watchdogTask?.cancel()
+
+        watchdogTask = Task { [weak self] in
+
+            var failures = 0
+
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+
+                guard let self else { return }
+
+                if (try? await client.health()) != nil {
+                    failures = 0
+                    continue
+                }
+
+                failures += 1
+
+                guard failures >= 3 else { continue }
+
+                self.handleEngineLoss()
+                return
+            }
+        }
+    }
+
+    private func handleEngineLoss() {
+
+        client = nil
+        phase = .failed("The engine stopped answering. Restarting…")
+        message = "Engine lost"
+
+        process = nil
+        spawnedByUs = false
+
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            await self?.start()
+        }
     }
 
     private var isFailure: Bool {

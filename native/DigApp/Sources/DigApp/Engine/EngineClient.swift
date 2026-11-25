@@ -33,6 +33,15 @@ enum EngineError: LocalizedError {
         case .unreachable(let message): "Engine unreachable: \(message)"
         }
     }
+
+    /// The one error worth retrying by itself: the engine is up, Soulseek is not.
+    var isNotLoggedIn: Bool {
+        if case .badStatus(let code, let message) = self {
+            return code == 409 || message.lowercased().contains("not logged in")
+        }
+
+        return false
+    }
 }
 
 /// HTTP + Server-Sent Events against the local engine.
@@ -123,6 +132,17 @@ struct EngineClient {
         try decoder.decode(T.self, from: try await send(request(path, method: "DELETE")))
     }
 
+    /// Ask the engine to log in again. After a relogin elsewhere it stops
+    /// retrying on purpose, until a client says the other session is gone.
+    func reconnect() async throws {
+        struct Response: Decodable {
+            let connected: Bool?
+            let connecting: Bool?
+        }
+
+        _ = try await post("/login", as: Response.self)
+    }
+
     func health() async throws -> EngineHealth {
         try decoder.decode(EngineHealth.self, from: try await send(request("/health")))
     }
@@ -173,6 +193,11 @@ struct EngineClient {
 
     func searchResults(token: Int, offset: Int = 0, limit: Int = 500) async throws -> SearchResultsPage {
         try await get("/search/\(token)/results?offset=\(offset)&limit=\(limit)")
+    }
+
+    func stopSearch(token: Int) async throws {
+        struct Response: Decodable { let stopped: Int }
+        _ = try await post("/search/\(token)/stop", as: Response.self)
     }
 
     func separateCrateTrack(id: String) async throws {

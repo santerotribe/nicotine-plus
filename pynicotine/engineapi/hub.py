@@ -257,6 +257,7 @@ class EventHub:
         self.publish(
             "disconnect",
             manual=bool(getattr(msg, "manual_disconnect", False)),
+            relogged=bool(getattr(msg, "relogged", False)),
             username=None,
         )
 

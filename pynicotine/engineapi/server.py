@@ -499,6 +499,17 @@ class Handler(BaseHTTPRequestHandler):
         from pynicotine.core import core
         from pynicotine.events import events
 
+        if parts == ["login"]:
+            from pynicotine.core import core
+
+            if core.users.login_status != 0:
+                return self._reply(HTTPStatus.OK, {"connected": True})
+
+            # After "someone logged in elsewhere" the engine deliberately stops
+            # retrying; a front end can ask it to try again once that client quits.
+            self._invoke(core.connect)
+            return self._reply(HTTPStatus.ACCEPTED, {"connecting": True})
+
         if len(parts) == 3 and parts[0] == "users" and parts[2] == "browse":
             username = parts[1]
 

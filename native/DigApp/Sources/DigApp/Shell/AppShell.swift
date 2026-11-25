@@ -210,17 +210,19 @@ struct TopStrip: View {
                 .shadow(color: .black.opacity(0.5), radius: 0, y: 0.5)
 
             HStack {
-                HStack(spacing: 6) {
-                    LED(isOn: model.isConnected,
-                        color: model.isConnected ? Theme.statusSaved : Theme.statusError,
-                        size: 5)
+                HStack(spacing: 8) {
+                    LED(isOn: connectionLED.isOn, color: connectionLED.color, size: 5)
 
-                    InstrumentLabel(
-                        text: model.isConnected
-                            ? (model.state?.username ?? "CONNECTED")
-                            : (model.supervisor.message),
-                        color: Theme.textMuted
-                    )
+                    InstrumentLabel(text: connectionLabel, color: Theme.textMuted)
+                        .lineLimit(1)
+
+                    if !model.isOnline && model.isConnected {
+                        Button("Reconnect") {
+                            Task { await model.reconnect() }
+                        }
+                        .buttonStyle(DigKeyStyle(dense: true))
+                        .amberFocus()
+                    }
                 }
                 .padding(.leading, 12)
 
@@ -237,6 +239,32 @@ struct TopStrip: View {
         .frame(height: Theme.topStripHeight)
         .background(Material.chrome)
         .overlay(alignment: .top) { PanelRim() }
+    }
+
+    /// Green when the Soulseek connection is up, amber while it retries, red
+    /// when the account is offline — the engine can be reachable and logged out.
+    private var connectionLED: (isOn: Bool, color: Color) {
+        switch model.state?.connection {
+        case .online:
+            return (true, Theme.statusSaved)
+        case .connecting:
+            return (true, Theme.accent)
+        default:
+            return (model.isConnected, Theme.statusError)
+        }
+    }
+
+    private var connectionLabel: String {
+        switch model.state?.connection {
+        case .online:
+            return model.state?.username ?? "ONLINE"
+        case .connecting:
+            return "CONNECTING"
+        default:
+            guard model.isConnected else { return model.supervisor.message }
+
+            return model.accountInUse ? "ACCOUNT IN USE ELSEWHERE" : "SOULSEEK OFFLINE"
+        }
     }
 
     private func iconKey(_ symbol: String, help: String) -> some View {

@@ -321,6 +321,7 @@ class SearchStore:
         return {
             "token": token,
             "total": entry.total,
+            "dropped": entry.dropped,
             "offset": offset,
             "limit": limit,
             "results": [record.to_dict() for record in page],

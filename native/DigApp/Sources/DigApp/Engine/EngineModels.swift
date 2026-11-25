@@ -22,8 +22,20 @@ struct EngineState: Decodable {
         case eventSubscribers = "event_subscribers"
     }
 
-    var isLoggedIn: Bool { (status ?? "0") != "0" && username?.isEmpty == false }
+    var isLoggedIn: Bool { connection == .online && username?.isEmpty == false }
     var privilegesDays: Int { (privilegesSeconds ?? 0) / 86_400 }
+
+    enum Connection: String {
+        case offline, connecting, online
+    }
+
+    var connection: Connection {
+        switch status {
+        case "2": .online
+        case "1": .connecting
+        default: .offline
+        }
+    }
 }
 
 struct EngineHealth: Decodable {

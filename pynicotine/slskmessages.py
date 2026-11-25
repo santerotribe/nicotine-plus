@@ -331,6 +331,8 @@ class ServerConnect(InternalMessage):
 @dataclass(slots=True, eq=False, repr=False)
 class ServerDisconnect(InternalMessage):
     manual_disconnect: bool = False
+    # True when the server dropped us because the account logged in elsewhere.
+    relogged: bool = False
 
 
 @dataclass(slots=True, eq=False, repr=False)

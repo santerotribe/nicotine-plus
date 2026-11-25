@@ -1662,7 +1662,9 @@ class NetworkThread(Thread):
                 "port": self._server_address.port
             })
 
-        if self._server_relogged:
+        relogged = self._server_relogged
+
+        if relogged:
             log.add(_("Someone logged in to your Soulseek account elsewhere"))
             self._server_relogged = False
 
@@ -1674,7 +1676,7 @@ class NetworkThread(Thread):
 
         events.emit_main_thread(
             "server-disconnect",
-            ServerDisconnect(manual_disconnect=self._manual_server_disconnect)
+            ServerDisconnect(manual_disconnect=self._manual_server_disconnect, relogged=relogged)
         )
 
     def _send_message_to_server(self, msg) -> None:

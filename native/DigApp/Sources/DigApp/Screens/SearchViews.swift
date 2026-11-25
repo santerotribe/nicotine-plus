@@ -45,15 +45,26 @@ struct SearchColumn: View {
                             .multilineTextAlignment(.center)
                             .fixedSize(horizontal: false, vertical: true)
                             .padding(.horizontal, 16)
-                    } else if model.search.isSearching {
+
+                        if !model.isOnline {
+                            Button("Reconnect") {
+                                Task { await model.reconnect() }
+                            }
+                            .buttonStyle(DigKeyStyle(dense: true))
+                            .amberFocus()
+                        }
+                    } else if model.search.isLive || model.search.isSearching {
                         HStack(spacing: 6) {
                             LED(color: Theme.accent, size: 4)
-                            InstrumentLabel(text: "SEARCHING…", color: Theme.accent)
+                            InstrumentLabel(text: "WAITING FOR PEERS", color: Theme.accent)
                         }
 
-                        Text("Results stream in as peers answer.")
+                        Text("The search stays open. Results land as peers answer, sometimes for a minute or more on a general term.")
                             .font(Theme.sans(11))
                             .foregroundStyle(Theme.textMuted)
+                            .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.horizontal, 16)
                     } else {
                         InstrumentLabel(text: "NO SEARCH YET")
                         Text("Type a term and press Return.")
@@ -99,12 +110,22 @@ struct SearchColumn: View {
                 }
             }
 
-            HStack {
-                InstrumentLabel(text: "\(model.search.results.count) OF \(model.search.total) RESULTS",
+            HStack(spacing: 8) {
+                InstrumentLabel(text: "\(model.search.results.count) OF \(model.search.totalLabel) RESULTS",
                                 color: Theme.textMuted)
+
                 Spacer()
 
-                if model.search.isSearching {
+                if model.search.isLive {
+                    LED(color: Theme.accent, size: 4)
+                    InstrumentLabel(text: "LIVE", color: Theme.accent)
+
+                    Button("Stop") {
+                        Task { await model.search.stop() }
+                    }
+                    .buttonStyle(DigKeyStyle(dense: true))
+                    .amberFocus()
+                } else if model.search.isSearching {
                     LED(color: Theme.accent, size: 4)
                     InstrumentLabel(text: "SEARCHING…")
                 }

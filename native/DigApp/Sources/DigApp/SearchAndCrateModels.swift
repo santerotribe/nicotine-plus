@@ -49,10 +49,25 @@ struct SearchResultRow: Decodable, Identifiable, Hashable {
 }
 
 struct SearchResultsPage: Decodable {
+
     let total: Int
+    let dropped: Int
     let offset: Int
     let limit: Int
     let results: [SearchResultRow]
+
+    enum CodingKeys: String, CodingKey {
+        case total, dropped, offset, limit, results
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        total = try container.decode(Int.self, forKey: .total)
+        dropped = try container.decodeIfPresent(Int.self, forKey: .dropped) ?? 0
+        offset = try container.decode(Int.self, forKey: .offset)
+        limit = try container.decode(Int.self, forKey: .limit)
+        results = try container.decode([SearchResultRow].self, forKey: .results)
+    }
 }
 
 struct SearchGroup: Identifiable {
@@ -72,12 +87,30 @@ final class SearchModel {
     var token: Int?
     var results: [SearchResultRow] = []
     var total = 0
+    var dropped = 0
     var isSearching = false
     var error = ""
     var selectedID: String?
 
+    /// A search stays open after it is created: the network trickles results in
+    /// for minutes, and the SSE stream tells us when a peer has answered.
+    private(set) var isLive = false
+    private(set) var startedAt = Date()
+    private(set) var lastArrivalAt: Date?
+
+    private(set) var needsRetry = false
+    private var pollTask: Task<Void, Never>?
+    private var refreshTask: Task<Void, Never>?
+
     var selected: SearchResultRow? {
         results.first { $0.id == selectedID }
+    }
+
+    /// "50,000+" when the engine hit its cap, plain "1,240" otherwise.
+    var totalLabel: String {
+        let number = total.formatted()
+
+        return dropped > 0 ? number + "+" : number
     }
 
     /// Peers in first-appearance order, so the list stays stable as results land.
@@ -108,56 +141,134 @@ final class SearchModel {
 
         guard !query.isEmpty else { return }
 
+        await stop()
+
         isSearching = true
         error = ""
         results = []
         total = 0
-        token = nil
         selectedID = nil
+        startedAt = Date()
+        lastArrivalAt = nil
 
         do {
             let summary = try await client.startSearch(term: query)
             token = summary.token
+            isLive = true
 
-            var stable = 0
-            var lastTotal = -1
-
-            // ~24 s ceiling; searches normally settle in two or three ticks.
-            for _ in 0..<30 {
-                try? await Task.sleep(nanoseconds: 800_000_000)
-
-                guard let page = try? await client.searchResults(token: summary.token, offset: 0, limit: 500) else {
-                    continue
-                }
-
-                results = page.results
-                total = page.total
-
-                if selectedID == nil {
-                    selectedID = results.first?.id
-                }
-
-                if page.total == lastTotal {
-                    stable += 1
-
-                    if stable >= 3 {
-                        break
-                    }
-                } else {
-                    stable = 0
-                    lastTotal = page.total
-                }
-            }
-
-            if results.isEmpty {
-                error = "No results. The network can be quiet for white labels and promos; try a shorter term."
-            }
+            await refresh()
+            startPolling()
 
         } catch {
-            self.error = error.localizedDescription
+            if let engineError = error as? EngineError, engineError.isNotLoggedIn {
+                needsRetry = true
+                self.error = "Soulseek is offline. This search runs by itself when the connection returns."
+            } else {
+                self.error = error.localizedDescription
+            }
+
+            isSearching = false
+        }
+    }
+
+    /// Called when Soulseek comes back: a search entered while offline runs now.
+    func retryIfNeeded() async {
+
+        guard needsRetry, !term.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+
+        needsRetry = false
+        await run()
+    }
+
+    /// Called from the event stream: a peer just answered. Refresh soon, but not
+    /// once per event — a busy search fires many.
+    func noteArrival(total: Int) {
+
+        lastArrivalAt = Date()
+
+        if total > self.total {
+            scheduleRefresh()
+        }
+    }
+
+    func refresh() async {
+
+        guard let client, let token else { return }
+
+        guard let page = try? await client.searchResults(token: token, offset: 0, limit: 2_000) else {
+            return
         }
 
+        results = page.results
+        total = page.total
+        dropped = page.dropped
         isSearching = false
+
+        if selectedID == nil {
+            selectedID = results.first?.id
+        }
+    }
+
+    /// The engine removed the search (or another client stopped it).
+    func clearLive() {
+
+        isLive = false
+        isSearching = false
+        pollTask?.cancel()
+        refreshTask?.cancel()
+    }
+
+    /// Shutdown path: stop local work without another round trip.
+    func cancel() {
+
+        pollTask?.cancel()
+        refreshTask?.cancel()
+        isLive = false
+        isSearching = false
+    }
+
+    func stop() async {
+
+        pollTask?.cancel()
+        pollTask = nil
+        refreshTask?.cancel()
+        refreshTask = nil
+
+        if let client, let token {
+            try? await client.stopSearch(token: token)
+        }
+
+        token = nil
+        isLive = false
+        isSearching = false
+    }
+
+    private func startPolling() {
+
+        pollTask?.cancel()
+
+        pollTask = Task { [weak self] in
+
+            // A fallback for a dropped event stream; slow enough to be cheap.
+            for _ in 0..<240 {
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+
+                guard let self, self.isLive else { return }
+                await self.refresh()
+            }
+        }
+    }
+
+    private func scheduleRefresh() {
+
+        refreshTask?.cancel()
+
+        refreshTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 400_000_000)
+
+            guard let self else { return }
+            await self.refresh()
+        }
     }
 
     func loadMore() async {

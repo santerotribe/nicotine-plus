@@ -355,6 +355,21 @@ and a peer-filter miss looked like a failed search.
 
 ![Search results, grouped by peer, first result selected](assets/search-2026-11-25.png)
 
+Search is **live**: it stays open, the app listens to the `search` SSE events,
+and a slow term fills in over minutes (an "italo disco" search returned 50 000
+results from 712 peers). A generic term can take a minute or two before the
+first peer answers — that is the network, not a failure.
+
+The header shows the real Soulseek state, not just "engine reachable":
+`ONLINE`, `CONNECTING`, `SOULSEEK OFFLINE`, or `ACCOUNT IN USE ELSEWHERE`
+(the last one is the server kicking us because another client logged in with
+`santero`). `POST /login` asks the engine to try again — Nicotine+ stops
+retrying on purpose after a relogin, so a front end needs that endpoint.
+
+A search entered while offline runs by itself when the connection returns, and
+the app's watchdog restarts the engine if it dies: kill the process and a fresh
+one is up and logged in within ~20 s, with the pending search re-run.
+
 Build notes (they cost time to learn):
 
 - SwiftPM needs `--disable-sandbox` here (the harness already sandboxes us, and

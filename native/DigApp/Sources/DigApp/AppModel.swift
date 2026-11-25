@@ -45,6 +45,9 @@ final class AppModel {
     var section: Section = .browse
     var state: EngineState?
     var statusText = ""
+    /// True when the last disconnect was the server kicking us for another
+    /// login on the same account; retrying automatically would just ping-pong.
+    var accountInUse = false
     var browse = BrowserModel()
     var audition = AuditionModel()
     var search = SearchModel()
@@ -106,9 +109,43 @@ final class AppModel {
         }
     }
 
+    /// Login and disconnect events only say what changed; re-read the snapshot
+    /// so the status light and the account row follow the real connection.
+    func refreshState() async {
+
+        guard let client else { return }
+
+        if let snapshot = try? await client.state() {
+            state = snapshot
+        }
+    }
+
+    var isOnline: Bool { state?.connection == .online }
+
+    /// Log in again, then let a search that was waiting run.
+    func reconnect() async {
+
+        guard let client else { return }
+
+        try? await client.reconnect()
+
+        for _ in 0..<30 {
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+
+            await refreshState()
+
+            if isOnline {
+                break
+            }
+        }
+
+        await search.retryIfNeeded()
+    }
+
     func shutdown() {
         eventTask?.cancel()
         stemTask?.cancel()
+        search.cancel()
         supervisor.stop()
     }
 
@@ -168,6 +205,38 @@ final class AppModel {
 
             guard payload.username == browse.selectedUser else { return }
             await browse.reloadCurrent()
+
+        case "login":
+            struct LoginEvent: Decodable { let success: Bool; let username: String? }
+
+            if let login = event.decode(LoginEvent.self), login.success {
+                accountInUse = false
+                await refreshState()
+                await search.retryIfNeeded()
+            }
+
+        case "disconnect":
+            struct DisconnectEvent: Decodable { let relogged: Bool? }
+            accountInUse = event.decode(DisconnectEvent.self)?.relogged ?? false
+            await refreshState()
+
+        case "search":
+            struct SearchArrival: Decodable {
+                let token: Int
+                let total: Int
+                let user: String
+            }
+
+            if let arrival = event.decode(SearchArrival.self),
+               arrival.token == search.token {
+                search.noteArrival(total: arrival.total)
+            }
+
+        case "search_removed":
+            struct Removed: Decodable { let token: Int }
+            if let removed = event.decode(Removed.self), removed.token == search.token {
+                search.clearLive()
+            }
 
         case "audition":
             guard let snapshot = event.decode(AuditionState.self) else {
