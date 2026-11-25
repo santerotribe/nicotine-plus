@@ -20,6 +20,7 @@ from pynicotine.transfers import TransferStatus
 
 from pynicotine.digging import pipeline
 from pynicotine.digging.actions import crate_for
+from pynicotine.digging.paths import virtual_basename
 from pynicotine.digging.crate import (
     STATUS_FAILED,
     STATUS_KEPT,
@@ -69,7 +70,7 @@ class PipelineService:
         if track is None:
             return
 
-        path = Path(transfer.folder_path or "") / Path(transfer.virtual_path).name
+        path = Path(transfer.folder_path or "") / virtual_basename(transfer.virtual_path)
 
         if not path.is_file():
             return
@@ -83,7 +84,7 @@ class PipelineService:
         if track is None:
             return
 
-        path = Path(transfer.folder_path or "") / Path(transfer.virtual_path).name
+        path = Path(transfer.folder_path or "") / virtual_basename(transfer.virtual_path)
 
         if path.is_file():
             self._launch(track, path)
@@ -111,7 +112,7 @@ class PipelineService:
                 return candidate
 
         folder = self.settings.work_path / "downloads" / track.username
-        candidate = folder / Path(track.virtual_path).name
+        candidate = folder / (track.filename or virtual_basename(track.virtual_path))
 
         return candidate if candidate.is_file() else None
 

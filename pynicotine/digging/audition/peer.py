@@ -64,7 +64,7 @@ class PeerPreview:
 
         if existing is not None:
             self.transfer = existing
-            finished = Path(existing.folder_path or "") / Path(self.virtual_path).name
+            finished = Path(existing.folder_path or "") / self.filename
 
             if existing.status == TransferStatus.FINISHED and finished.is_file():
                 # Already downloaded: play it straight away, nothing to fetch
@@ -167,7 +167,7 @@ class PeerPreview:
                     self.on_audio_ready(self)
 
         if status == TransferStatus.FINISHED:
-            self.finished_path = str(Path(transfer.folder_path) / Path(self.virtual_path).name)
+            self.finished_path = str(Path(transfer.folder_path) / self.filename)
 
             if self.promote_to is not None:
                 self._promote()

@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from pynicotine.digging.cache import PreviewCache
+from pynicotine.digging.paths import virtual_basename
 from pynicotine.digging.settings import DiggingSettings
 from pynicotine.transfers import TransferStatus
 
@@ -88,7 +89,7 @@ def sweep(settings: DiggingSettings | None = None, core=None) -> SweepReport:
             if Path(transfer.folder_path or "") != previews:
                 continue
 
-            active_names.add(Path(transfer.virtual_path).name)
+            active_names.add(virtual_basename(transfer.virtual_path))
             handle = getattr(transfer, "file_handle", None)
 
             if handle is not None:

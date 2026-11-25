@@ -24,7 +24,8 @@ def test_find_track_requires_kept_without_stems(tmp_path):
     kept = crate.add(CrateTrack(username="dj", virtual_path="a\\b.flac", filename="b.flac",
                                 status=STATUS_KEPT))
 
-    assert service._find_track("dj", "a\\b.flac") is kept
+    found = service._find_track("dj", "a\\b.flac")
+    assert found is not None and found.id == kept.id
 
     kept.stems = {"vocals": "/x"}
     crate.save()
