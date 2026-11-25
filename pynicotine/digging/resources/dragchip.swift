@@ -14,6 +14,7 @@ final class ChipView: NSView, NSDraggingSource {
 
     let fileURL: URL
     let icon: NSImage
+    var dragBeganAt = Date.distantPast
 
     init(frame: NSRect, fileURL: URL) {
         self.fileURL = fileURL
@@ -58,6 +59,7 @@ final class ChipView: NSView, NSDraggingSource {
         let draggingItem = NSDraggingItem(pasteboardWriter: item)
         draggingItem.setDraggingFrame(bounds, contents: snapshot())
 
+        dragBeganAt = Date()
         beginDraggingSession(with: [draggingItem], event: event, source: self)
     }
 
@@ -69,6 +71,16 @@ final class ChipView: NSView, NSDraggingSource {
     func draggingSession(_ session: NSDraggingSession,
                          endedAt screenPoint: NSPoint,
                          operation: NSDragOperation) {
+        let elapsed = Date().timeIntervalSince(dragBeganAt)
+
+        FileHandle.standardError.write(Data("dragchip: drag ended after \(elapsed)s\n".utf8))
+
+        // A synthesized drag can be refused immediately; leave the chip on
+        // screen so a normal click-drag still works.
+        if operation == [] && elapsed < 0.3 {
+            return
+        }
+
         NSApp.terminate(nil)
     }
 
@@ -85,13 +97,15 @@ final class ChipView: NSView, NSDraggingSource {
 }
 
 let arguments = CommandLine.arguments
+let immediate = arguments.contains("--immediate")
+let paths = arguments.dropFirst().filter { !$0.hasPrefix("--") }
 
-guard arguments.count >= 2 else {
-    FileHandle.standardError.write(Data("usage: dragchip <file>\n".utf8))
+guard let path = paths.first else {
+    FileHandle.standardError.write(Data("usage: dragchip [--immediate] <file>\n".utf8))
     exit(2)
 }
 
-let fileURL = URL(fileURLWithPath: arguments[1])
+let fileURL = URL(fileURLWithPath: path)
 
 guard FileManager.default.fileExists(atPath: fileURL.path) else {
     FileHandle.standardError.write(Data("dragchip: no such file\n".utf8))
@@ -117,8 +131,33 @@ panel.isOpaque = false
 panel.backgroundColor = .clear
 panel.hasShadow = true
 panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-panel.contentView = ChipView(frame: NSRect(origin: .zero, size: size), fileURL: fileURL)
+let chip = ChipView(frame: NSRect(origin: .zero, size: size), fileURL: fileURL)
+panel.contentView = chip
 panel.orderFrontRegardless()
+
+if immediate {
+    // The pointer is still down on the GTK side when the chip is created, so
+    // start the drag ourselves instead of asking for a second gesture. The
+    // chip stays usable if this is rejected.
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+        let location = panel.convertPoint(fromScreen: NSEvent.mouseLocation)
+
+        if let event = NSEvent.mouseEvent(
+            with: .leftMouseDown,
+            location: location,
+            modifierFlags: [],
+            timestamp: ProcessInfo.processInfo.systemUptime,
+            windowNumber: panel.windowNumber,
+            context: nil,
+            eventNumber: 0,
+            clickCount: 1,
+            pressure: 1.0
+        ) {
+            FileHandle.standardError.write(Data("dragchip: starting immediate drag\n".utf8))
+            chip.mouseDown(with: event)
+        }
+    }
+}
 
 // Safety: never leave a ghost window behind
 DispatchQueue.main.asyncAfter(deadline: .now() + 30) {

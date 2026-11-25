@@ -960,10 +960,10 @@ class DigPlayer:
 
         from pynicotine.digging.draghelper import start_drag
 
-        started, reason = start_drag(path)
+        started, reason = start_drag(path, immediate=True)
 
         if started:
-            self._set_status("chip ready — drag it into Ableton", sticky_seconds=8)
+            self._set_status("drag into Ableton…", sticky_seconds=5)
 
         else:
             self._set_status(f"native drag unavailable: {reason}", sticky_seconds=8)

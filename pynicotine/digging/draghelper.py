@@ -60,8 +60,14 @@ def helper_binary(settings: DiggingSettings | None = None) -> Path | None:
     return target
 
 
-def start_drag(path: str | Path, settings: DiggingSettings | None = None) -> tuple[bool, str]:
-    """Show the native drag chip for a file. Returns (started, reason)."""
+def start_drag(path: str | Path, settings: DiggingSettings | None = None,
+               immediate: bool = True) -> tuple[bool, str]:
+    """Hand a file to the native drag chip. Returns (started, reason).
+
+    immediate starts the drag on the synthetic mouse-down that is still held on
+    the GTK side, so one press-drag carries the file into the DAW. If macOS
+    refuses it, the chip stays on screen and can be dragged by hand.
+    """
 
     settings = settings or DiggingSettings.load()
     file_path = Path(path).expanduser()
@@ -74,9 +80,16 @@ def start_drag(path: str | Path, settings: DiggingSettings | None = None) -> tup
     if binary is None:
         return False, "swiftc is unavailable; install Xcode command line tools"
 
+    command = [str(binary)]
+
+    if immediate:
+        command.append("--immediate")
+
+    command.append(str(file_path))
+
     try:
         subprocess.Popen(
-            [str(binary), str(file_path)],
+            command,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             start_new_session=True,
