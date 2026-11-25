@@ -52,6 +52,18 @@ python -m pynicotine.digging preview "01 Ruggier - Long Ride (Original Mix).aiff
 Playback uses PortAudio (`sounddevice`) so the app owns the buffer: instant
 seeks, sample-accurate playhead for the waveform, no external player.
 
+## First run
+
+Press **Separation…** in the Dig window once and pick one of:
+
+- **MVSEP** — paste an API token and a separation type id
+- **Studio PC** — the agent URL and its token
+- **This Mac** — local Demucs, if installed
+
+Keeping a track before this is configured opens the same dialog instead of
+failing later: keep downloads the file, separation runs when it lands, the Live
+Set is built and opened, and the crate records the result.
+
 ## Setup
 
 ### MVSEP
