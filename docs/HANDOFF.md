@@ -1,6 +1,6 @@
 # Handoff — Nicotine+ fork with digging workflow
 
-Last updated: 2026-11-25 · branch `main-ours` · 43 commits ahead of `origin/master`
+Last updated: 2026-11-25 · branch `main-ours` · 45 commits ahead of `origin/master`
 
 This is a working fork of [Nicotine+](https://github.com/nicotine-plus/nicotine-plus)
 (Python 3.11+, GTK 4 via PyGObject, GPL-3.0-or-later) extended into a
@@ -257,15 +257,10 @@ paging exists so a native front end can virtualise.
 3. ~~**Playback handoff**~~ — done (`/audition`: resolved source + peer lifecycle).
 4. **Transfer controls + settings API** — pause/resume/cancel/keep on
    `/downloads/<id>`, digging config read/write (`/settings`).
-5. **SwiftUI spike** — window with user browse (paged), a player driven by
-   `/audition` + AVAudioEngine, and a drag surface; launch the Python engine as a
-   child process. Evaluate before committing to the full native shell.
-   **Follow [UI-DIRECTION.md](UI-DIRECTION.md)**: arcaNative's tokens (Manrope +
-   IBM Plex Mono, graphite surfaces, gold accent, 120 ms motion), the reference's
-   rail → list → detail skeleton, a persistent 48 pt instrument transport, hairline
-   depth only. Port arca's *values*, never its source (GPL vs a separate product).
-   arcaNative is also the architectural precedent: it is a SwiftUI shell driving a
-   Python engine over HTTP, already built.
+5. **SwiftUI spike** — *started*: see §8. Browse, audition, transport and drag
+   work against the live engine. Still thin: search/crate rows, Live and Settings
+   placeholders, no separation controls. Follow [UI-DIRECTION.md](UI-DIRECTION.md)
+   (arcaNative's tokens, the reference's skeleton, gold accent, hairlines).
 6. **Polish** — remove the chip fallback if the overlay is reliable, GTK3 audit,
    i18n pass.
 
@@ -308,3 +303,52 @@ loose arguments.
   (currently ~34 days) only affect queue position.
 - External agent CLIs are unavailable in this environment (Claude 401 expired,
   Codex/Cursor blocked by the sandbox); there is no sub-agent spawn tool.
+
+---
+
+## 8. Native client spike (SwiftUI)
+
+`native/DigApp` is a working SwiftUI shell, built to
+[UI-DIRECTION.md](UI-DIRECTION.md). It talks to the same engine over the same
+API; nothing in `pynicotine/` knows it exists.
+
+```sh
+# connect to an engine already on 8766
+NICOTINE_API_URL=http://127.0.0.1:8766 NICOTINE_API_TOKEN=devtoken native/DigApp/run.sh
+
+# or let the app start the engine headless as a child process
+native/DigApp/run.sh
+```
+
+What works: paged browse (peers → folders → files, Enter auditions, ↑/↓ moves),
+the persistent instrument transport, AVAudioEngine playback from
+`/audition` (local share, peer partial, or a catalogue URL downloaded once),
+waveform peaks and seek, SSE-driven updates, Keep, AppKit drag-out
+(`NSDraggingSession`, files can be dropped into Live/Finder), engine spawn with a
+health wait, and a headless check (below).
+
+```sh
+DIG_SELFTEST=1 NICOTINE_API_TOKEN=devtoken native/DigApp/run.sh   # PASS/FAIL per step
+DIG_OPEN=santero DIG_AUTO=1 native/DigApp/run.sh                  # browse + audition on launch
+```
+
+Build notes (they cost time to learn):
+
+- SwiftPM needs `--disable-sandbox` here (the harness already sandboxes us, and
+  `sandbox-exec` is refused), and the scratch path must be outside this volume
+  (`/tmp/digapp-build`), otherwise the compiler hits I/O errors on the SSD.
+- The SSE client must parse one `data:` line as one event: `AsyncLineSequence`
+  does not reliably surface the blank separator line, so the classic
+  "flush on empty line" parser silently receives nothing.
+- SSE is framed with `Transfer-Encoding: chunked` for exactly that reason: with
+  HTTP/1.0 + connection close, URLSession buffers the whole (endless) body.
+- The app spawns `python -m pynicotine -n` with `NICOTINE_API_PORT/TOKEN`,
+  writes its log to `~/Library/Logs/DigApp-engine.log` (falling back to the temp
+  folder), and terminates it in `applicationWillTerminate`. Killing the app with
+  SIGTERM bypasses that: check `lsof -nP -iTCP:8766` if a stale engine survives.
+- Manrope's Core Text family resolves as "Manrope ExtraLight"; look faces up by
+  instance name and register the bundled woff2 files at launch (as arca does).
+
+Known gaps in the spike: search/crate are read-only lists, Live and Settings are
+placeholders, peer-partial playback opens the file once (no retry when more bytes
+arrive), no separation or stem UI, and no keyboard focus ring yet.

@@ -1,0 +1,150 @@
+// SPDX-FileCopyrightText: 2026 Schema Apps
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+import SwiftUI
+
+/// The persistent instrument strip: always there, always the same register.
+struct Transport: View {
+
+    @Bindable var model: AppModel
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1.0 / 30.0)) { timeline in
+            let position = model.player.position()
+            let duration = model.player.duration
+
+            HStack(spacing: 14) {
+                playKey
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(model.player.title.isEmpty ? "Nothing auditioning" : model.player.title)
+                        .font(Theme.sans(12, .medium))
+                        .foregroundStyle(model.player.title.isEmpty ? Theme.textMuted : Theme.textPrimary)
+                        .lineLimit(1)
+
+                    HStack(spacing: 8) {
+                        InstrumentLabel(text: model.player.badge.isEmpty ? "IDLE" : model.player.badge,
+                                        color: model.player.badge.isEmpty ? Theme.textMuted : Theme.textTertiary)
+
+                        if !model.player.errorText.isEmpty {
+                            Text(model.player.errorText)
+                                .font(Theme.sans(10))
+                                .foregroundStyle(Theme.statusError)
+                                .lineLimit(1)
+                        }
+                    }
+                }
+                .frame(width: 250, alignment: .leading)
+
+                WaveformView(
+                    peaks: compactPeaks,
+                    progress: duration > 0 ? position / duration : 0,
+                    interactive: true,
+                    onSeek: { fraction in model.player.seek(to: fraction * duration) }
+                )
+                .frame(height: 22)
+
+                Text(TimeFormat.clock(position) + " / " + TimeFormat.clock(duration))
+                    .font(Theme.mono(11))
+                    .foregroundStyle(Theme.textTertiary)
+                    .monospacedDigit()
+
+                Spacer(minLength: 4)
+
+                if model.audition.sessionID != nil {
+                    keepKey
+                    dragHandle
+                    closeKey
+                }
+            }
+            .padding(.horizontal, 12)
+            .frame(height: Theme.transportHeight)
+            .background(Theme.bgBase)
+            .id(timeline.date.timeIntervalSince1970)
+        }
+    }
+
+    /// Downsample the whole track into the strip; never just its first slice.
+    private var compactPeaks: [Float] {
+
+        let peaks = model.player.peaks
+        let target = 240
+
+        guard peaks.count > target else { return peaks }
+
+        let step = Double(peaks.count) / Double(target)
+
+        return (0..<target).map { index in
+            peaks[min(peaks.count - 1, Int(Double(index) * step))]
+        }
+    }
+
+    private var playKey: some View {
+
+        Button {
+            if model.player.isReady {
+                model.player.toggle()
+            } else if let state = model.audition.state {
+                model.apply(state)
+            }
+        } label: {
+            Image(systemName: model.player.isPlaying ? "pause.fill" : "play.fill")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(Theme.textPrimary)
+                .frame(width: 30, height: 30)
+                .background(Circle().fill(Theme.bgControl))
+                .overlay(Circle().strokeBorder(Theme.borderMedium, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .help(model.player.isPlaying ? "Pause" : "Play")
+    }
+
+    private var keepKey: some View {
+
+        Button {
+            Task { await model.keep() }
+        } label: {
+            Label(model.audition.isKept ? "Kept" : "Keep", systemImage: model.audition.isKept ? "checkmark" : "tray.and.arrow.down")
+                .labelStyle(.titleAndIcon)
+        }
+        .buttonStyle(DigPrimaryKeyStyle())
+        .disabled(model.audition.isKept)
+        .opacity(model.audition.isKept ? 0.55 : 1)
+    }
+
+    private var dragHandle: some View {
+
+        ZStack {
+            if let url = model.player.localFileURL {
+                DragOutHandle(fileURL: url)
+            }
+
+            HStack(spacing: 6) {
+                Image(systemName: "square.and.arrow.up")
+                    .font(.system(size: 11, weight: .medium))
+                InstrumentLabel(text: "Drag", color: Theme.textSecondary)
+            }
+            .allowsHitTesting(false)
+        }
+        .frame(width: 84, height: Theme.instrumentKeyHeight)
+        .background(RoundedRectangle(cornerRadius: Theme.radiusPad).fill(Theme.bgControl))
+        .overlay(RoundedRectangle(cornerRadius: Theme.radiusPad).strokeBorder(Theme.border, lineWidth: 1))
+        .help(model.player.localFileURL == nil
+              ? "The audio is not on disk yet"
+              : "Drag into Ableton or Finder")
+    }
+
+    private var closeKey: some View {
+
+        Button {
+            Task { await model.closeAudition() }
+        } label: {
+            Image(systemName: "xmark")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(Theme.textTertiary)
+                .frame(width: 26, height: 26)
+        }
+        .buttonStyle(.plain)
+        .help("Close the audition")
+    }
+}

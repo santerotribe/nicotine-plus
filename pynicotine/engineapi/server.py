@@ -195,7 +195,17 @@ class Handler(BaseHTTPRequestHandler):
         data = json.dumps(payload, default=str)
         seq = payload.get("seq")
         prefix = f"id: {seq}\n" if seq else ""
-        self.wfile.write(f"{prefix}event: {payload.get('type', 'message')}\ndata: {data}\n\n".encode())
+        self._sse_chunk(f"{prefix}event: {payload.get('type', 'message')}\ndata: {data}\n\n".encode())
+
+    def _sse_chunk(self, body: bytes) -> None:
+        """Write one HTTP/1.1 chunk.
+
+        SSE has no Content-Length, so without chunked framing URLSession waits
+        for the connection to close before delivering anything. Chunked means a
+        native client sees events as they happen; curl is equally happy.
+        """
+
+        self.wfile.write(f"{len(body):X}\r\n".encode() + body + b"\r\n")
         self.wfile.flush()
 
     def _stream_events(self, query: dict) -> None:
@@ -209,16 +219,15 @@ class Handler(BaseHTTPRequestHandler):
         except OSError:
             pass
 
-        # Server-Sent Events are an endless response: HTTP/1.0 semantics with a
-        # connection close is what every EventSource implementation expects.
-        self.protocol_version = "HTTP/1.0"
-        self.close_connection = True
+        # Endless response, framed with chunked transfer encoding so clients do
+        # not wait for a close that never comes.
+        self.protocol_version = "HTTP/1.1"
 
         try:
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", "text/event-stream")
             self.send_header("Cache-Control", "no-cache, no-transform")
-            self.send_header("Connection", "close")
+            self.send_header("Transfer-Encoding", "chunked")
             self.send_header("X-Accel-Buffering", "no")
             self.end_headers()
 
@@ -231,8 +240,7 @@ class Handler(BaseHTTPRequestHandler):
                     payload = subscriber.queue.get(timeout=HEARTBEAT_SECONDS)
 
                 except queue.Empty:
-                    self.wfile.write(b": ping\n\n")
-                    self.wfile.flush()
+                    self._sse_chunk(b": ping\n\n")
                     continue
 
                 dropped = subscriber.take_dropped()

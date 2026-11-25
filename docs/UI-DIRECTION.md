@@ -1,7 +1,10 @@
 # UI direction — the digging client
 
-**Status:** note for the SwiftUI spike. Nothing here is implemented yet; this file
-is the brief the spike must follow.
+**Status:** the spike is implemented in `native/DigApp` and follows this brief
+for §2–§4 (tokens, registers, skeleton), §6 and §7 (components, interaction).
+Search and Crate are read-only lists; Live and Settings are placeholders. The
+decisions in §11 were taken as recommended: gold accent, 88 pt rail, persistent
+transport, `#1A1D1F` canvas.
 
 **Two sources, in this order:**
 
@@ -299,14 +302,15 @@ loading approach are facts and methods; a `Theme.swift` written against them is
 ours. The two fonts (Manrope, IBM Plex Mono) are OFL — bundle them with their
 licence files, as arca does.
 
-## 11. Open decisions (want a yes/no before the spike)
+## 11. Decisions taken
 
-1. **Accent**: gold `#FFCD52` (family, recommended) or the reference's violet?
-2. **Rail**: 88 pt icon rail (reference structure, recommended) or arca's 206 pt
-   labelled sidebar?
-3. **Transport**: persistent 48 pt bottom strip (recommended) or only inside the
-   Audition screen?
-4. **Canvas depth**: arca's `#1A1D1F` (recommended) or the reference's near-black
-   `#141617`?
-5. **Scope**: should the spike cover Browse + Audition + transport only, or all six
-   screens with placeholder content?
+1. **Accent**: gold `#FFCD52`, as arca. No violet anywhere.
+2. **Rail**: 88 pt icon rail, as the reference.
+3. **Transport**: persistent 48 pt strip across list and detail.
+4. **Canvas**: `#1A1D1F`; the darker `#141617` ladder was not used.
+5. **Scope**: all six sections exist; Browse, Audition and Crate are real, Search
+   is read-only, Live and Settings are placeholders.
+
+Open for the next pass: hover/focus rings on every key, a true scrolled-list
+keyboard model (the current one moves selection but does not scroll it into
+view), and a stem lane view under the waveform.

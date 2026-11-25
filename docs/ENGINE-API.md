@@ -104,7 +104,9 @@ drops its oldest queued events (2048-event buffer) and emits
 never slowed down by a slow reader: publishing is non-blocking.
 
 Heartbeats: `": ping\n\n"` every 15 s, so proxies and URLSession keep the
-connection alive.
+connection alive. The response is `HTTP/1.1` with `Transfer-Encoding: chunked`
+(an endless body has no length). Without that framing, URLSession waits for the
+connection to close before delivering anything, which looks like a dead stream.
 
 ```sh
 curl -N -H 'Authorization: Bearer secret' http://127.0.0.1:8766/events
@@ -316,5 +318,7 @@ generation. The native app owns presentation, audio output and macOS integration
   events missed while disconnected. Paged reads cover the gap.
 - One Soulseek account per process; two clients on the same account fight.
 - `/search` results are engine-side only for searches started through the API.
-- The API is HTTP/1.1 with keep-alive; SSE downgrades that connection to 1.0
-  and closes it on disconnect.
+- SSE is chunked and stays open; every other endpoint is plain HTTP/1.1 with
+  keep-alive. A client that reads SSE line-by-line should treat each `data:` line
+  as one event (the blank separator is not reliably surfaced by
+  `AsyncLineSequence`).
