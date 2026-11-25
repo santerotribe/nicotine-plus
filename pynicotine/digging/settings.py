@@ -18,6 +18,35 @@ STEM_PRESETS = {
 }
 
 
+def renderer_available(renderer: str, settings: "DiggingSettings") -> tuple[bool, str]:
+    """Whether a renderer can run right now, plus a short reason when it cannot."""
+
+    if renderer == "local":
+        from pynicotine.digging.renderers.local import available
+
+        if available():
+            return True, ""
+
+        return False, "Demucs is not installed (pip install demucs)"
+
+    if renderer == "pc":
+        if settings.pc_url:
+            return True, ""
+
+        return False, "Studio PC address is not set"
+
+    if renderer == "mvsep":
+        if not settings.mvsep_token:
+            return False, "MVSEP token is not set"
+
+        if not settings.mvsep_sep_type:
+            return False, "MVSEP separation type is not set"
+
+        return True, ""
+
+    return False, f"Unknown renderer: {renderer}"
+
+
 def default_config_dir() -> Path:
     """Return the Nicotine+ config directory.
 

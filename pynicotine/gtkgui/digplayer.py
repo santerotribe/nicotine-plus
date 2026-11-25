@@ -26,6 +26,7 @@ from gi.repository import Pango
 
 from pynicotine.digging.audition import match
 from pynicotine.digging.audition.player import Player, PlayerError
+from pynicotine.digging.settings import renderer_available
 from pynicotine.gtkgui.application import GTK_API_VERSION
 
 WINDOW_TITLE = "Dig"
@@ -56,6 +57,7 @@ class DigPlayer:
         self._peer_last_bytes = 0
         self._drag_start_x = 0.0
         self._playing_peer = False
+        self._status_until = 0.0
         self._timer_id = None
         self._token = 0
         self.state_callback = None   # called with (playing: bool) on transport changes
@@ -156,6 +158,10 @@ class DigPlayer:
         self.volume.set_visible(True)
         self.volume.connect("value-changed", self._on_volume_changed)
 
+        self.setup_button = Gtk.Button(label="Separation…", visible=True)
+        self.setup_button.set_tooltip_text("Choose where stems are separated")
+        self.setup_button.connect("clicked", self._on_setup_clicked)
+
         self.keep_button = Gtk.Button(label="Keep + separate", visible=True)
         self.keep_button.connect("clicked", self._on_keep_clicked)
 
@@ -165,6 +171,7 @@ class DigPlayer:
         _append(controls, self.position_label)
         _append(controls, Gtk.Box(hexpand=True, visible=True))
         _append(controls, self.volume)
+        _append(controls, self.setup_button)
         _append(controls, self.keep_button)
         _append(outer, controls)
 
@@ -287,9 +294,6 @@ class DigPlayer:
             self.status_label.set_text(f"peer unavailable: {error}")
             return
 
-        from pynicotine.logfacility import log
-
-        log.add(f"Digging: requested peer file {self.source.filename} from {self.source.username}")
         self.peer = peer
         self.status_label.set_text("asking the peer for the real file…")
 
@@ -330,7 +334,7 @@ class DigPlayer:
         if self.player.duration > 0:
             # Something is already playing (likely the catalogue preview): swap
             # sources underneath it so the listener hears no gap or click.
-            self.status_label.set_text("switching to the peer's file…")
+            self._set_status("switching to the peer's file…", sticky_seconds=5)
             threading.Thread(
                 target=self._preload_and_adopt, args=(path, hint, resume_at, token), daemon=True
             ).start()
@@ -403,7 +407,7 @@ class DigPlayer:
         self.play_button.set_label("⏸")
         self._start_timer()
         self._notify_state()
-        self.status_label.set_text("playing the peer's file (exact audio)")
+        self._set_status("playing the peer's file (exact audio)", sticky_seconds=5)
 
         if self.candidate is not None:
             self.match_label.set_text(f"{self.candidate.label}  (catalogue match in background)")
@@ -615,8 +619,8 @@ class DigPlayer:
             # The peer file is playing fine; a catalogue miss is not an error
             return False
 
-        self.status_label.set_text(message[:220])
-        self.match_label.set_text("no playable source — peer fetch is the fallback")
+        self._set_status(message[:220], sticky_seconds=8)
+        self.match_label.set_text("no playable source yet")
         return False
 
     def _status(self, message: str, token: int) -> bool:
@@ -683,10 +687,41 @@ class DigPlayer:
     def _on_volume_changed(self, scale) -> None:
         self.player.volume = scale.get_value()
 
+    def _on_setup_clicked(self, *_args) -> None:
+        self._open_setup(self._on_keep_clicked if self.source is not None else None)
+
+    def _open_setup(self, then=None) -> None:
+
+        from pynicotine.gtkgui.digsetup import SeparationSetup
+
+        def saved(settings):
+            ready, reason = renderer_available(settings.renderer, settings)
+
+            if ready:
+                self._set_status(f"separation ready ({settings.renderer})")
+
+                if then is not None:
+                    then()
+
+            else:
+                self._set_status(f"separation not ready: {reason}", sticky_seconds=8)
+
+        SeparationSetup(self.application, on_saved=saved).present()
+
     def _on_keep_clicked(self, *_args) -> None:
 
         if self.source is None:
-            self.status_label.set_text("nothing to keep (no browsed file attached)")
+            self._set_status("nothing to keep (no browsed file attached)")
+            return
+
+        from pynicotine.digging.settings import DiggingSettings, renderer_available
+
+        settings = DiggingSettings.load()
+        ready, reason = renderer_available(settings.renderer, settings)
+
+        if not ready:
+            self._set_status(f"{reason} — choose how to separate", sticky_seconds=8)
+            self._open_setup(self._on_keep_clicked)
             return
 
         try:
@@ -726,7 +761,7 @@ class DigPlayer:
         except Exception:  # noqa: BLE001
             pass
 
-        self.status_label.set_text(f"kept {track.filename} — separating when the download lands")
+        self._set_status(f"kept {track.filename} — separating when the download lands", sticky_seconds=8)
 
     # -- export and drag-to-DAW ------------------------------------------
 
@@ -923,12 +958,25 @@ class DigPlayer:
             GLib.source_remove(self._timer_id)
             self._timer_id = None
 
+    def _set_status(self, text: str, sticky_seconds: float = 4.0) -> None:
+        """Show a message that the playhead tick will not immediately overwrite."""
+
+        import time as _time
+
+        self.status_label.set_text(text)
+        self._status_until = _time.monotonic() + sticky_seconds
+
     def _tick(self) -> bool:
+
+        import time as _time
 
         self._update_labels()
         self.waveform.queue_draw()
         self._maybe_extend_peer()
         self._maybe_resume_peer()
+
+        if _time.monotonic() < self._status_until:
+            return True
 
         if self.candidate is not None:
             fraction = self.player.buffered_fraction

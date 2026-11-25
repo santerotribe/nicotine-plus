@@ -357,6 +357,22 @@ class MainWindow(Window):
         self.gesture_click.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
         self.gesture_click.connect("pressed", self.on_cancel_auto_away)
 
+        # Digging housekeeping and the keep -> stems -> Live set worker
+        try:
+            import threading
+
+            from pynicotine.digging.maintenance import sweep
+            from pynicotine.digging.service import start_service
+
+            start_service()
+            threading.Thread(target=sweep, kwargs={"core": core}, daemon=True,
+                             name="digging-cleanup").start()
+
+        except Exception as error:  # noqa: BLE001 - digging is optional
+            from pynicotine.logfacility import log
+
+            log.add(f"Digging: startup housekeeping failed: {error}")
+
         # Clear notifications when main window is focused
         self.window_active_handler = self.widget.connect("notify::is-active", self.on_window_active_changed)
         self.window_visible_handler = self.widget.connect("notify::visible", self.on_window_visible_changed)
