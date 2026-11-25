@@ -312,6 +312,8 @@ loose arguments.
 [UI-DIRECTION.md](UI-DIRECTION.md). It talks to the same engine over the same
 API; nothing in `pynicotine/` knows it exists.
 
+![The spike auditioning a local AIF, with the persistent transport](assets/native-spike-2026-11-25.png)
+
 ```sh
 # connect to an engine already on 8766
 NICOTINE_API_URL=http://127.0.0.1:8766 NICOTINE_API_TOKEN=devtoken native/DigApp/run.sh
