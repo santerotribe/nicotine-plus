@@ -139,6 +139,17 @@ class DigPlayer:
         self.hint_label = Gtk.Label(label="click or drag the waveform to scrub", xalign=0, visible=True)
         self.hint_label.add_css_class("dim-label")
 
+        # Cmd-drag anywhere on the waveform also exports the file
+        self.waveform_drag_source = Gtk.DragSource(actions=Gdk.DragAction.COPY)
+        self.waveform_drag_source.connect("prepare", self._on_drag_prepare)
+        self.waveform_drag_source.connect("drag-begin", self._on_drag_begin)
+        self.waveform_drag_source.connect("drag-end", self._on_drag_end)
+
+        key_controller = Gtk.EventControllerKey()
+        key_controller.connect("key-pressed", self._on_key_pressed)
+        key_controller.connect("key-released", self._on_key_released)
+        self.window.add_controller(key_controller)
+
         _append(hint_row, self.drag_handle)
         _append(hint_row, self.hint_label)
         _append(outer, hint_row)
@@ -646,6 +657,7 @@ class DigPlayer:
         self.play_button.set_label("⏸")
         self._start_timer()
         self._notify_state()
+        self._prefetch_export()
         return False
 
     # -- playback state ---------------------------------------------------
@@ -664,6 +676,7 @@ class DigPlayer:
         self.play_button.set_label("⏸")
         self._start_timer()
         self._notify_state()
+        self._prefetch_export()
         return False
 
     def _fail(self, message: str, token: int) -> bool:
@@ -851,6 +864,18 @@ class DigPlayer:
 
         return f"{safe_name(label)} [{source}].wav"
 
+    def _prefetch_export(self) -> None:
+        """Write the export in the background so a drag can start immediately."""
+
+        def work() -> None:
+            try:
+                self.export_audio()
+
+            except Exception:  # noqa: BLE001 - a failed prefetch is harmless
+                pass
+
+        threading.Thread(target=work, daemon=True, name="digging-export").start()
+
     def export_audio(self):
         """Write the currently loaded audio to a WAV that a DAW can accept."""
 
@@ -872,25 +897,76 @@ class DigPlayer:
 
     def _on_drag_prepare(self, _source, _x, _y):
 
-        path = self.export_audio()
+        from pynicotine.logfacility import log
+
+        try:
+            path = self.export_audio()
+
+        except Exception as error:  # noqa: BLE001 - surface why the drag is refused
+            log.add(f"Digging: export for drag failed: {error}")
+            self._set_status(f"could not prepare the file: {error}", sticky_seconds=8)
+            return None
 
         if path is None:
+            self._set_status("nothing decoded yet — wait for audio, then drag", sticky_seconds=6)
             return None
 
         gfile = Gio.File.new_for_path(str(path))
-        providers = [Gdk.ContentProvider.new_for_value(Gdk.FileList.new_from_array([gfile]))]
+        uri = gfile.get_uri()
+
+        # macOS turns text/uri-list into public.file-url, which is what Live
+        # accepts from Finder. FileList is only a fallback for other toolkits.
+        provider = None
 
         try:
-            uri = GLib.Bytes.new(f"{gfile.get_uri()}\r\n".encode())
-            providers.append(Gdk.ContentProvider.new_for_bytes("text/uri-list", uri))
+            provider = Gdk.ContentProvider.new_for_bytes(
+                "text/uri-list", GLib.Bytes.new(f"{uri}\r\n".encode()))
 
-        except Exception:  # noqa: BLE001 - uri-list support is a bonus
-            pass
+        except Exception as error:  # noqa: BLE001
+            log.add(f"Digging: uri-list provider failed: {error}")
 
-        return Gdk.ContentProvider.new_union(providers)
+        if provider is None:
+            try:
+                provider = Gdk.ContentProvider.new_for_value(Gdk.FileList.new_from_array([gfile]))
+
+            except Exception as error:  # noqa: BLE001
+                log.add(f"Digging: file-list provider failed: {error}")
+
+        if provider is None:
+            self._set_status("could not build a drag payload", sticky_seconds=8)
+            return None
+
+        log.add(f"Digging: dragging {path.name} into another app")
+        self._set_status(f"dragging {path.name}", sticky_seconds=3)
+        return provider
+
+    META_KEYS = (0xFFE7, 0xFFE8, 0xFFEB, 0xFFEC)  # Meta_L/R, Super_L/R
+
+    def _on_key_pressed(self, _controller, keyval, _keycode, _state) -> bool:
+
+        controllers = list(self.waveform.observe_controllers())
+
+        if keyval in self.META_KEYS and self.waveform_drag_source not in controllers:
+            self.waveform.add_controller(self.waveform_drag_source)
+            self.waveform.set_cursor_from_name("grab")
+            self._set_status("Cmd-drag the waveform to export it", sticky_seconds=3)
+
+        return False
+
+    def _on_key_released(self, _controller, keyval, _keycode, _state) -> bool:
+
+        if keyval in self.META_KEYS:
+            controllers = list(self.waveform.observe_controllers())
+
+            if self.waveform_drag_source in controllers:
+                self.waveform.remove_controller(self.waveform_drag_source)
+
+            self.waveform.set_cursor_from_name("pointer")
+
+        return False
 
     def _on_drag_begin(self, *_args) -> None:
-        self.status_label.set_text("drag into Ableton to import")
+        self._set_status("drag into Ableton to import", sticky_seconds=4)
 
     def _on_drag_end(self, *_args) -> None:
         self.status_label.set_text("ready")
