@@ -78,6 +78,7 @@ struct AppShell: View {
         }
         .background(Theme.bgCanvas)
         .ignoresSafeArea(.container, edges: .top)
+        .background(WindowConfigurator())
         .task(id: model.section) { await model.activateSection() }
     }
 }
@@ -116,8 +117,12 @@ struct Rail: View {
             .help("Settings")
         }
         .frame(width: Theme.railWidth)
+        // Clear the traffic lights: the window is full-bleed, so the rail owns
+        // the titlebar zone and its first item starts below the buttons.
+        .padding(.top, 30)
         .background(Material.chrome)
         .overlay(alignment: .top) { PanelRim() }
+        .ignoresSafeArea(.container, edges: .bottom)
     }
 
     private var account: some View {

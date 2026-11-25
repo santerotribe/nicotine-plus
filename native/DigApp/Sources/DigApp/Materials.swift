@@ -10,20 +10,24 @@ import SwiftUI
 enum Material {
 
     // Caps: the surface a control sits on top of.
-    static let capTop = Color(hex: 0x2B2E31)
-    static let capBottom = Color(hex: 0x1B1D1F)
-    static let capPressedTop = Color(hex: 0x16181A)
-    static let capPressedBottom = Color(hex: 0x1D1F21)
+    static var capTop: Color { Palette.shade(0x2B2E31, 0x26262A) }
+    static var capBottom: Color { Palette.shade(0x1B1D1F, 0x17171A) }
+    static var capPressedTop: Color { Palette.shade(0x16181A, 0x121214) }
+    static var capPressedBottom: Color { Palette.shade(0x1D1F21, 0x1B1B1E) }
 
     // Chrome: the anodised panels the controls sit on.
-    static let chrome = LinearGradient(
-        colors: [Color(hex: 0x1F2224), Color(hex: 0x191B1D)],
-        startPoint: .top, endPoint: .bottom
-    )
+    static var chrome: LinearGradient {
+        LinearGradient(
+            colors: Palette.active == .suno
+                ? [Color(hex: 0x17171A), Color(hex: 0x111113)]
+                : [Color(hex: 0x1F2224), Color(hex: 0x191B1D)],
+            startPoint: .top, endPoint: .bottom
+        )
+    }
 
     // Wells: the surface things sit inside (search field, waveform housing, displays).
-    static let well = Color(hex: 0x15171A)
-    static let wellEdge = Color(hex: 0x0E1011)
+    static var well: Color { Palette.shade(0x15171A, 0x0D0D0F) }
+    static var wellEdge: Color { Palette.shade(0x0E1011, 0x08080A) }
 
     // Lights.
     static let rimTop = Color.white.opacity(0.07)
@@ -32,10 +36,10 @@ enum Material {
     static let innerLight = Color.white.opacity(0.05)
 
     // The lit accent, warmer in its core than the flat gold.
-    static let litCore = Color(hex: 0xFFDF9A)
-    static let litMid = Color(hex: 0xFFC64B)
-    static let litEdge = Color(hex: 0xE2A62F)
-    static let litInk = Color(hex: 0x241A05)
+    static var litCore: Color { Palette.shade(0xFFDF9A, 0xEFD6A2) }
+    static var litMid: Color { Palette.shade(0xFFC64B, 0xD4A54A) }
+    static var litEdge: Color { Palette.shade(0xE2A62F, 0xA87C2E) }
+    static var litInk: Color { Palette.shade(0x241A05, 0x1A1408) }
 }
 
 /// A raised cap: vertical gradient, dark outer edge, light along the top.

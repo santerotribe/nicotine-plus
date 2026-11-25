@@ -13,48 +13,52 @@ enum Theme {
 
     // MARK: - Surfaces
 
-    static let bgCanvas = Color(hex: 0x1A1D1F)
-    static let bgBase = Color(hex: 0x1C1E20)
-    static let bgWorkspace = Color(hex: 0x202224)
-    static let bgCard = Color(hex: 0x202224)
-    static let bgElevated = Color(hex: 0x26292B)
-    static let bgHover = Color(hex: 0x26292B)
-    static let bgRowSelected = Color(hex: 0x2D3134)
-    static let bgControl = Color(hex: 0x202224)
-    static let bgControlHover = Color(hex: 0x2A2D30)
-    static let bgWaveCanvas = Color(hex: 0x1A1D1F)
+    static var bgCanvas: Color { Palette.shade(0x1A1D1F, 0x0B0B0D) }
+    static var bgBase: Color { Palette.shade(0x1C1E20, 0x101012) }
+    static var bgWorkspace: Color { Palette.shade(0x202224, 0x151517) }
+    static var bgCard: Color { Palette.shade(0x202224, 0x19191C) }
+    static var bgElevated: Color { Palette.shade(0x26292B, 0x202023) }
+    static var bgHover: Color { Palette.shade(0x26292B, 0x202023) }
+    static var bgRowSelected: Color { Palette.shade(0x2D3134, 0x26262A) }
+    static var bgControl: Color { Palette.shade(0x202224, 0x19191C) }
+    static var bgControlHover: Color { Palette.shade(0x2A2D30, 0x222226) }
+    static var bgWaveCanvas: Color { Palette.shade(0x1A1D1F, 0x0B0B0D) }
 
-    static let border = Color(hex: 0x2C2F31)
-    static let borderMedium = Color(hex: 0x3A3E40)
-    static let borderSelected = Color(hex: 0xFFCD52).opacity(0.58)
+    static var border: Color { Palette.shade(0x2C2F31, 0x242428) }
+    static var borderMedium: Color { Palette.shade(0x3A3E40, 0x34343A) }
+    static var borderSelected: Color { accent.opacity(0.58) }
 
     // MARK: - Ink
 
-    static let textPrimary = Color(hex: 0xEEECE6)
-    static let textSecondary = Color(hex: 0xB6BCB9)
-    static let textTertiary = Color(hex: 0xA8AEAB)
-    static let textMuted = Color(hex: 0x9AA19D)
+    static var textPrimary: Color { Palette.shade(0xEEECE6, 0xF7F4EF) }
+    static var textSecondary: Color { Palette.shade(0xB6BCB9, 0xC2C2C1) }
+    static var textTertiary: Color { Palette.shade(0xA8AEAB, 0xA3A3A3) }
+    static var textMuted: Color { Palette.shade(0x9AA19D, 0x8C8B90) }
 
-    static let statusSaved = Color(hex: 0x8FBFAE)
-    static let statusError = Color(hex: 0xD8938C)
+    static var statusSaved: Color { Palette.shade(0x8FBFAE, 0x93BFA6) }
+    static var statusError: Color { Palette.shade(0xD8938C, 0xD08A84) }
 
     // MARK: - Accent
 
-    static let accent = Color(hex: 0xFFCD52)
-    static let accentHover = Color(hex: 0xFFE093)
-    static let accentDeep = Color(hex: 0xBD902C)
-    static let accentSoft = Color(hex: 0xFFCD52).opacity(0.12)
-    static let primaryGradient = LinearGradient(
-        colors: [Color(hex: 0xFFDC7D), Color(hex: 0xFFCB4C), Color(hex: 0xEEB735)],
-        startPoint: .top, endPoint: .bottom
-    )
-    static let primaryPressed = Color(hex: 0xE9B841)
+    static var accent: Color { Palette.shade(0xFFCD52, 0xD4A54A) }
+    static var accentHover: Color { Palette.shade(0xFFE093, 0xE6BE6E) }
+    static var accentDeep: Color { Palette.shade(0xBD902C, 0xA87C2E) }
+    static var accentSoft: Color { accent.opacity(0.12) }
+    static var primaryGradient: LinearGradient {
+        LinearGradient(
+            colors: Palette.active == .suno
+                ? [Color(hex: 0xEFD6A2), Color(hex: 0xD4A54A), Color(hex: 0xB08434)]
+                : [Color(hex: 0xFFDC7D), Color(hex: 0xFFCB4C), Color(hex: 0xEEB735)],
+            startPoint: .top, endPoint: .bottom
+        )
+    }
+    static var primaryPressed: Color { Palette.shade(0xE9B841, 0xC2953C) }
 
     // MARK: - Waveform
 
-    static let waveGraphite = Color(hex: 0x4A4A4C)
-    static let waveGraphitePeak = Color(hex: 0x737472)
-    static let waveAmber = Color(hex: 0xFFCD52)
+    static var waveGraphite: Color { Palette.shade(0x4A4A4C, 0x3A3A40) }
+    static var waveGraphitePeak: Color { Palette.shade(0x737472, 0x74747C) }
+    static var waveAmber: Color { accent }
 
     // MARK: - Geometry
 

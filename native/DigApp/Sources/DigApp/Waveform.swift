@@ -92,7 +92,7 @@ struct WaveformView: View {
 
             // A meter, not a silhouette: an RMS body with a peak tick above it.
             let rect = CGRect(x: x, y: middle - height / 2, width: barWidth, height: height)
-            let color = isPlayed ? Material.litMid : Color(hex: 0x3B3E40)
+            let color = isPlayed ? Material.litMid : Theme.waveGraphite
 
             context.fill(Path(rect), with: .color(color))
 
@@ -103,7 +103,7 @@ struct WaveformView: View {
                 )
                 context.fill(
                     Path(tick),
-                    with: .color(isPlayed ? Material.litCore : Color(hex: 0x74787A))
+                    with: .color(isPlayed ? Material.litCore : Theme.waveGraphitePeak)
                 )
             }
 

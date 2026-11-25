@@ -398,3 +398,33 @@ Remaining candidates: the LED could blink while a peer is queueing (hardware
 "working" cue), the playhead could carry a peak-hold tick, and the window itself
 still has stock macOS chrome around the bezel.
 
+## 13. Window chrome
+
+The window is full-bleed: no titlebar is drawn, the rail owns the titlebar zone,
+and the first rail item is inset **30 pt** so the traffic lights never sit on a
+control. The chrome is draggable (`NSWindow.isMovableByWindowBackground`) and
+the window background is the canvas colour, so no system grey shows at the edges.
+
+## 14. Palettes (`DIG_SKIN`)
+
+Two palettes share one structure; `DIG_SKIN=suno` selects the second at launch.
+
+| Token | `arca` (default) | `suno` |
+|---|---|---|
+| canvas | `#1A1D1F` | `#0B0B0D` |
+| chrome / base | `#1C1E20` | `#101012` |
+| workspace | `#202224` | `#151517` |
+| card | `#202224` | `#19191C` |
+| elevated | `#26292B` | `#202023` |
+| border | `#2C2F31` | `#242428` |
+| ink primary | `#EEECE6` | `#F7F4EF` |
+| ink secondary | `#B6BCB9` | `#C2C2C1` |
+| accent | `#FFCD52` | `#D4A54A` |
+| accent deep | `#BD902C` | `#A87C2E` |
+| lit key | `#FDCD7D → #FFCB4C → #EEB735` | `#EFD6A2 → #D4A54A → #B08434` |
+
+The Suno palette comes from their shipped CSS: base `#101012`, warm ink
+`#F7F4EF`, and the antique metallics `#C4A670` / `#D4A54A` (their brand pink
+`#DE1677` is deliberately not used — one accent only). It reads quieter and
+blacker than arca's graphite; the structure, type and materials are identical.
+
