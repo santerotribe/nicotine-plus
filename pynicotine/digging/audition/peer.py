@@ -63,9 +63,22 @@ class PeerPreview:
         existing = core.downloads.transfers.get(self.username + self.virtual_path)
 
         if existing is not None:
+            self.transfer = existing
+            finished = Path(existing.folder_path or "") / Path(self.virtual_path).name
+
+            if existing.status == TransferStatus.FINISHED and finished.is_file():
+                # Already downloaded: play it straight away, nothing to fetch
+                self.finished_path = str(finished)
+                self.partial_path = str(finished)
+                self.status_text = "already downloaded"
+
+                if self.on_audio_ready is not None:
+                    self.on_audio_ready(self)
+
+                return
+
             # A previous preview was paused when the listener moved on: resume it
             # rather than queueing a duplicate (enqueue_download would no-op).
-            self.transfer = existing
             log.add(f"Digging: resuming paused peer preview {self.filename}")
             core.downloads.retry_download(existing, bypass_filter=True)
             return
@@ -78,6 +91,23 @@ class PeerPreview:
             size=self.size,
             file_attributes=self.attributes,
         )
+
+    def resume(self) -> None:
+        """Ask the peer for more data after playback caught up with the buffer."""
+
+        transfer = self.transfer
+
+        if transfer is None or self.cancelled:
+            return
+
+        if transfer.status == TransferStatus.PAUSED:
+            from pynicotine.core import core
+
+            try:
+                core.downloads.retry_download(transfer, bypass_filter=True)
+
+            except Exception as error:  # noqa: BLE001
+                log.add_debug(f"Digging: could not resume preview: {error}")
 
     def cancel(self) -> None:
 

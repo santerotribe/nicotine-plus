@@ -188,6 +188,16 @@ class DigPlayer:
         # Housekeeping runs off the main thread: it touches transfers and disk
         threading.Thread(target=self._sweep_previews, daemon=True).start()
 
+        try:
+            from pynicotine.digging.service import start_service
+
+            start_service()
+
+        except Exception as error:  # noqa: BLE001 - never block the player
+            from pynicotine.logfacility import log
+
+            log.add(f"Digging: pipeline service unavailable: {error}")
+
     # -- public API -------------------------------------------------------
 
     def _sweep_previews(self) -> None:
@@ -708,7 +718,15 @@ class DigPlayer:
 
             self.peer.on_promoted = on_promoted
 
-        self.status_label.set_text(f"kept {track.filename} — downloading and queueing separation")
+        try:
+            from pynicotine.digging.service import start_service
+
+            start_service().kick(track)
+
+        except Exception:  # noqa: BLE001
+            pass
+
+        self.status_label.set_text(f"kept {track.filename} — separating when the download lands")
 
     # -- export and drag-to-DAW ------------------------------------------
 
@@ -831,7 +849,15 @@ class DigPlayer:
         if not self.player.duration:
             return
 
-        self.player.seek(fraction * self.player.duration, reload=reload)
+        target = fraction * self.player.duration
+        buffered = self.player.buffered_fraction * self.player.duration
+
+        if self.peer is not None and buffered and target > buffered + 1.0:
+            # The peer may have been paused when this track was left behind
+            self.peer.resume()
+            self.status_label.set_text("seeking — waiting for the peer to send that part")
+
+        self.player.seek(target, reload=reload)
         self._update_labels()
         self.waveform.queue_draw()
 

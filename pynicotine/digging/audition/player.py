@@ -25,6 +25,10 @@ class PlayerError(Exception):
     pass
 
 
+class PlaybackFinished(Exception):
+    """Raised by Player.render() when the current source has no more audio."""
+
+
 def decode(source: str | Path, start: float = 0.0, duration: float | None = None,
            sample_rate: int = DEFAULT_RATE, channels: int = DEFAULT_CHANNELS):
     """Decode a file or URL into a float32 numpy array shaped (frames, channels)."""
@@ -387,7 +391,14 @@ class Player:
 
                 return
 
-            if seconds <= buffered or self._buffer.done:
+            if self._buffer.done:
+                # Nothing more will arrive: clamp instead of parking past the end
+                with self._lock:
+                    self._position = max(0, int(min(seconds, buffered) * self.sample_rate))
+
+                return
+
+            if seconds <= buffered:
                 with self._lock:
                     self._position = max(0, int(seconds * self.sample_rate))
                 return
@@ -453,9 +464,13 @@ class Player:
             callback=self._callback,
         )
 
-    def _callback(self, outdata, frames, _time_info, status) -> None:  # noqa: ANN001
+    def render(self, frames: int):
+        """Produce one block of output audio. Device-free, so it is testable.
+
+        Raises PlaybackFinished when the current source is exhausted.
+        """
+
         import numpy as np
-        import sounddevice as sd
 
         with self._lock:
             audio = self._audio
@@ -466,18 +481,15 @@ class Player:
 
             if local < 0:
                 # Playhead sits before the buffered region (seeked backwards)
-                outdata.fill(0)
-                return
+                return np.zeros((frames, self.channels), dtype="float32")
 
             block, available, done = buffer.read(local, frames)
 
             if block is None:
-                outdata.fill(0)
-
                 if done:
-                    raise sd.CallbackStop
+                    raise PlaybackFinished
 
-                return
+                return np.zeros((frames, self.channels), dtype="float32")
 
             mixed = block * (self.volume * self._adopt_gain)
             fade = self._fade
@@ -495,35 +507,46 @@ class Player:
                         self._fade = None
                         self._adopt_gain = 1.0
 
-            outdata[:] = mixed
             self._position = int(self._position + available)
 
             if available < frames and done:
-                raise sd.CallbackStop
+                raise PlaybackFinished
 
-            return
+            return mixed
 
         with self._lock:
             if audio is None:
-                outdata.fill(0)
-                raise sd.CallbackStop
+                raise PlaybackFinished
 
             start = self._position
             end = min(len(audio), start + frames)
             block = audio[start:end]
+            output = np.zeros((frames, self.channels), dtype="float32")
             written = len(block)
 
             if written:
-                outdata[:written] = block * self.volume
-
-            if written < frames:
-                outdata[written:] = 0
+                output[:written] = block * self.volume
 
             self._position = end
             finished = self._position >= len(audio)
 
         if finished:
+            raise PlaybackFinished
+
+        return output
+
+    def _callback(self, outdata, frames, _time_info, _status) -> None:  # noqa: ANN001
+        import sounddevice as sd
+
+        try:
+            block = self.render(frames)
+
+        except PlaybackFinished:
+            outdata.fill(0)
+
             if self._on_finish:
                 self._on_finish()
 
             raise sd.CallbackStop
+
+        outdata[:] = block

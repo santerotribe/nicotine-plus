@@ -1386,7 +1386,14 @@ class UserBrowse:
         if self.playback_column is None:
             return
 
-        result = self.file_list_view.widget.get_path_at_pos(int(x), int(y))
+        try:
+            result = self.file_list_view.widget.get_path_at_pos(int(x), int(y))
+
+        except (AttributeError, TypeError):
+            # GTK releases without path-at-pos: row clicks are unavailable,
+            # Enter and the context menu still work.
+            self.playback_column = None
+            return
 
         if not result or len(result) < 3:
             return
