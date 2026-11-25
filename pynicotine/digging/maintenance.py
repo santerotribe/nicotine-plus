@@ -45,7 +45,7 @@ def sweep(settings: DiggingSettings | None = None, core=None) -> SweepReport:
 
     settings = settings or DiggingSettings.load()
     previews = settings.work_path / "previews"
-    exports = settings.work_path / "exports"
+    exports = settings.export_path.expanduser()
     report = SweepReport()
 
     kept_paths: set[str] = set()
@@ -138,7 +138,7 @@ def wipe(settings: DiggingSettings | None = None) -> SweepReport:
     settings = settings or DiggingSettings.load()
     report = SweepReport()
 
-    for folder in (settings.work_path / "previews", settings.work_path / "exports"):
+    for folder in (settings.work_path / "previews", settings.export_path.expanduser()):
         if not folder.is_dir():
             continue
 

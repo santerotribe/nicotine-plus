@@ -132,6 +132,7 @@ class DiggingSettings:
     preview_bytes: int = 2 * 1024 * 1024  # roughly 40-60 s of MP3, enough to judge a loop
     player: str = "afplay"
     preview_cache_mb: int = 2048          # disposable preview/export budget
+    export_dir: str = ""                  # where drag/export WAVs are written
 
     @property
     def preview_cache_bytes(self) -> int:
@@ -170,6 +171,15 @@ class DiggingSettings:
     @property
     def output_path(self) -> Path:
         return Path(self.output_dir).expanduser()
+
+    @property
+    def export_path(self) -> Path:
+        """Visible location for exported WAVs (macOS is happier outside dotfolders)."""
+
+        if self.export_dir:
+            return Path(self.export_dir).expanduser()
+
+        return self.work_path / "exports"
 
     def ensure_dirs(self) -> None:
         for folder in (

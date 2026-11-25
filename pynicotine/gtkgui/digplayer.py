@@ -196,6 +196,10 @@ class DigPlayer:
         self.status_label = Gtk.Label(xalign=0, ellipsize=Pango.EllipsizeMode.END, visible=True)
         self.status_label.add_css_class("dim-label")
         self.status_label.set_hexpand(True)
+        self.send_button = Gtk.Button(label="Send to Live", visible=True)
+        self.send_button.set_tooltip_text("Build a new Live set containing this audio, warped at its tempo")
+        self.send_button.connect("clicked", self._send_to_live)
+
         self.copy_button = Gtk.Button(label="Copy for Live", visible=True)
         self.copy_button.set_tooltip_text("Put the audio file on the clipboard, then paste in Ableton")
         self.copy_button.connect("clicked", self._copy_for_live)
@@ -203,6 +207,7 @@ class DigPlayer:
         self.export_button = Gtk.Button(label="Reveal file", visible=True)
         self.export_button.connect("clicked", self._on_export_clicked)
         _append(bottom_row, self.status_label)
+        _append(bottom_row, self.send_button)
         _append(bottom_row, self.copy_button)
         _append(bottom_row, self.export_button)
         _append(outer, bottom_row)
@@ -888,7 +893,7 @@ class DigPlayer:
         from pynicotine.digging.settings import DiggingSettings
 
         settings = DiggingSettings.load()
-        folder = settings.work_path / "exports"
+        folder = settings.export_path.expanduser()
         folder.mkdir(parents=True, exist_ok=True)
         return PreviewCache(folder, settings.preview_cache_bytes)
 
@@ -1018,6 +1023,48 @@ class DigPlayer:
 
     def _on_drag_end(self, *_args) -> None:
         self.status_label.set_text("ready")
+
+    def _send_to_live(self, *_args) -> None:
+        """Guaranteed import: build a Live set with this audio and open it."""
+
+        path = self.export_audio()
+
+        if path is None:
+            self._set_status("nothing decoded yet — wait for audio", sticky_seconds=6)
+            return
+
+        from pathlib import Path
+
+        from pynicotine.digging import ableton
+        from pynicotine.digging.analyze import detect_tempo
+        from pynicotine.digging.settings import DiggingSettings
+
+        settings = DiggingSettings.load()
+        self._set_status("building a Live set…", sticky_seconds=8)
+
+        try:
+            bpm, _confidence = detect_tempo(path)
+
+        except Exception:  # noqa: BLE001 - tempo is a nicety, not a requirement
+            bpm = 120.0
+
+        def work() -> None:
+
+            try:
+                built = ableton.build_live_set(
+                    stems={"audio": Path(path)},
+                    out_dir=settings.output_path / f"send-{path.stem}",
+                    name=path.stem,
+                    bpm=bpm or 120.0,
+                    settings=settings,
+                )
+                ableton.open_in_live(built.path, settings)
+                GLib.idle_add(self._set_status, f"opened {built.path.name} in Live", 6)
+
+            except Exception as error:  # noqa: BLE001
+                GLib.idle_add(self._set_status, f"could not build the set: {error}", 8)
+
+        threading.Thread(target=work, daemon=True, name="digging-send-live").start()
 
     def _copy_for_live(self, *_args) -> None:
         """Put the exported file on the macOS clipboard for pasting into a DAW."""
