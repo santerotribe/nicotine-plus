@@ -515,16 +515,17 @@ class DigPlayer:
 
         buffer = getattr(self.player, "_buffer", None)
 
-        if buffer is None or buffer.frames < int(1.0 * self.player.sample_rate):
+        if buffer is None:
             return
 
-        if buffer.done:
-            return
+        from pynicotine.digging.audition.player import should_extend
 
         hint = self.player.duration
         decoded = self.player.buffered_fraction * hint
+        since_load = now - max(self._peer_extend_at, self._peer_loaded_at)
 
-        if hint and self.player.position > decoded - 1.0 and self.player.position < hint - 0.5:
+        if should_extend(self.player.position, hint, decoded, buffer.frames,
+                         self.player.sample_rate, since_load, buffer.done):
             self._peer_extend_at = now
             self.player.load_stream(peer.partial_path, duration_hint=hint, start=self.player.position)
             self._peer_loaded_at = now

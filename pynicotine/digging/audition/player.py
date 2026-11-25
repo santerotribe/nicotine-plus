@@ -97,6 +97,26 @@ def self_chunk(value, seconds: float = 0.5) -> int:
     return max(1, int(seconds * rate))
 
 
+def should_extend(position: float, duration: float, decoded: float, frames: int,
+                  sample_rate: int, seconds_since_load: float, buffer_done: bool) -> bool:
+    """Whether playback should reopen the growing file to fetch more audio.
+
+    Guards the reload loop: right after a seek the buffer starts at the playhead,
+    so an unguarded edge check would restart ffmpeg on every tick.
+    """
+
+    if buffer_done or duration <= 0 or decoded <= 0:
+        return False
+
+    if seconds_since_load < 3.0:
+        return False
+
+    if frames < int(1.0 * sample_rate):
+        return False
+
+    return position > decoded - 1.0 and position < duration - 0.5
+
+
 class Player:
     """Decoded or progressively buffered audio with play/pause/seek (PortAudio)."""
 
