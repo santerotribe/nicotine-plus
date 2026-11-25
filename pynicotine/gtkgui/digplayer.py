@@ -63,6 +63,7 @@ class DigPlayer:
         self._peer_switch_bytes = 0
         self._peer_loaded_at = 0.0
         self._user_paused = False
+        self._drag_overlay = None
         self._timer_id = None
         self._token = 0
         self.state_callback = None   # called with (playing: bool) on transport changes
@@ -137,7 +138,7 @@ class DigPlayer:
         self.drag_handle.add_controller(drag_click)
 
         self.hint_label = Gtk.Label(
-            label="click or drag to scrub · ⌘click or the handle to drag into Ableton", xalign=0, visible=True)
+            label="click or drag to scrub · press and drag the handle into Ableton", xalign=0, visible=True)
         self.hint_label.add_css_class("dim-label")
 
         # Cmd-drag anywhere on the waveform also exports the file
@@ -248,6 +249,11 @@ class DigPlayer:
 
     def present(self) -> None:
         self.window.present()
+
+        if self._drag_overlay is None:
+            from pynicotine.digging.nativedrag import attach
+
+            self._drag_overlay = attach(self.window, self.drag_handle, self.export_audio)
 
     def load(self, filename: str, duration_hint: float = 0.0, source_path: str = "",
              source=None) -> None:
@@ -754,6 +760,10 @@ class DigPlayer:
         self.player.stop()
         self._stop_timer()
         self._cancel_peer()
+
+        if self._drag_overlay is not None:
+            self._drag_overlay.detach()
+            self._drag_overlay = None
 
         try:
             self._cache().enforce()
