@@ -164,3 +164,23 @@ def test_stop_clears_stream_state(tmp_path):
     assert playback._buffer is None
     assert playback._decoder is None
     assert playback.position == 0.0
+
+def test_adopt_remembers_the_adopted_source(tmp_path):
+
+    source = _write_tone(tmp_path / "peer.wav", seconds=3.0)
+    playback = Player()
+    playback.load_array(_array(seconds=2.0))
+
+    buffer, decoder = playback.preload_stream(source, duration_hint=3.0)
+
+    try:
+        assert _wait_for(buffer, 0.4)
+        playback.adopt(buffer, decoder, source=str(source))
+        assert playback._stream_source == str(source)
+
+        # Seeking beyond the buffer must reopen the adopted source, not the old one
+        playback.seek(2.5, reload=True)
+        assert str(playback._stream_source) == str(source)
+
+    finally:
+        playback.stop()

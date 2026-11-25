@@ -188,7 +188,7 @@ class Player:
         return buffer, decoder
 
     def adopt(self, buffer, decoder, start: float = 0.0, fade_seconds: float = 0.15,
-              duration_hint: float = 0.0) -> None:
+              duration_hint: float = 0.0, source: str = "") -> None:
         """Atomically continue playback from a preloaded buffer, crossfading.
 
         The outgoing audio keeps playing for a few frames while the incoming
@@ -230,6 +230,12 @@ class Player:
 
             self._buffer = buffer
             self._decoder = decoder
+
+            if source:
+                # Seeking past the buffer reopens this source, so it must be the
+                # file we are actually hearing, not the previous preview
+                self._stream_source = str(source)
+
             self._audio = None
             self._duration_hint = float(duration_hint or 0.0)
             self._position = int(start * self.sample_rate)

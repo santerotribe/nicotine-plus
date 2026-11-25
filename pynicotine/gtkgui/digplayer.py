@@ -427,7 +427,7 @@ class DigPlayer:
 
         try:
             self.player.adopt(buffer, decoder, start=position, duration_hint=hint,
-                              fade_seconds=0.25)
+                              fade_seconds=0.25, source=getattr(self.peer, "partial_path", ""))
 
         except Exception as error:  # noqa: BLE001
             self.status_label.set_text(f"switch failed: {error}")
@@ -482,6 +482,12 @@ class DigPlayer:
         """Restart playback if the transport stopped without the user asking."""
 
         if self._user_paused or not self.player.duration or self.player.is_playing:
+            return
+
+        buffer = getattr(self.player, "_buffer", None)
+
+        if buffer is not None and buffer.done and buffer.frames == 0:
+            self._set_status("no audio at that position yet", sticky_seconds=6)
             return
 
         # Sitting at the end of the track is a legitimate stop
@@ -1091,6 +1097,21 @@ class DigPlayer:
 
         target = fraction * self.player.duration
         buffered = self.player.buffered_fraction * self.player.duration
+
+        if (self.peer is not None and self.peer.bytes < self.peer.size
+                and (not buffered or target > buffered + 0.5)):
+            # The transfer has not reached that point yet: reopening the file
+            # there decodes nothing and used to kill playback outright.
+            self.player.seek(max(0.0, buffered - 0.5), reload=False)
+            self.peer.resume()
+            from pynicotine.logfacility import log
+
+            log.add(f"Digging: seek to {target:.0f}s clamped to {buffered:.0f}s "
+                    f"({self.peer.bytes}/{self.peer.size} bytes downloaded)")
+            self._set_status("that part is still downloading — waiting for the peer", sticky_seconds=6)
+            self._update_labels()
+            self.waveform.queue_draw()
+            return
 
         if self.peer is not None and buffered and target > buffered + 1.0:
             # The peer may have been paused when this track was left behind
