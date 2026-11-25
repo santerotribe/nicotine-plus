@@ -9,7 +9,8 @@ from pynicotine.digging.settings import DiggingSettings
 
 def _settings(tmp_path):
 
-    settings = DiggingSettings(work_dir=str(tmp_path / "work"), output_dir=str(tmp_path / "out"))
+    settings = DiggingSettings(work_dir=str(tmp_path / "work"), output_dir=str(tmp_path / "out"),
+                               export_dir=str(tmp_path / "work" / "exports"))
     (settings.work_path / "previews").mkdir(parents=True)
     (settings.work_path / "exports").mkdir(parents=True)
     return settings

@@ -1127,7 +1127,9 @@ class DigPlayer:
             self.status_label.set_text(str(error))
             return
 
-        self.status_label.set_text(f"exported {path.name}")
+        library_hint = " — in Live's browser: User Library ▸ Samples ▸ Digging" \
+            if "User Library" in str(path) else ""
+        self._set_status(f"exported {path.name}{library_hint}", sticky_seconds=8)
 
     # -- waveform interaction --------------------------------------------
 
