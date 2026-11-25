@@ -16,6 +16,7 @@ Peer fetching (the fallback for unreleased material) plugs into load(...) later.
 
 from __future__ import annotations
 
+import os
 import threading
 
 from gi.repository import Gdk
@@ -894,7 +895,19 @@ class DigPlayer:
 
         settings = DiggingSettings.load()
         folder = settings.export_path.expanduser()
-        folder.mkdir(parents=True, exist_ok=True)
+
+        try:
+            folder.mkdir(parents=True, exist_ok=True)
+            writable = os.access(folder, os.W_OK)
+
+        except OSError:
+            writable = False
+
+        if not writable:
+            # Sandboxed or read-only library: keep the export inside the profile
+            folder = settings.work_path / "exports"
+            folder.mkdir(parents=True, exist_ok=True)
+
         return PreviewCache(folder, settings.preview_cache_bytes)
 
     def _export_dir(self):
