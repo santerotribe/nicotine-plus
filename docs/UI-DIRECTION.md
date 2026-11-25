@@ -428,3 +428,9 @@ The Suno palette comes from their shipped CSS: base `#101012`, warm ink
 `#DE1677` is deliberately not used — one accent only). It reads quieter and
 blacker than arca's graphite; the structure, type and materials are identical.
 
+![arca palette](assets/palette-arca-2026-11-25.png)
+*arca: graphite surfaces, lemon gold.*
+
+![suno palette](assets/palette-suno-2026-11-25.png)
+*suno: near-black surfaces, antique gold.*
+
