@@ -71,6 +71,9 @@ struct AuditionPane: View {
                 facts(state: state, position: position)
                     .padding(.horizontal, 16)
 
+                stems(state: state)
+                    .padding(.horizontal, 16)
+
                 if !model.audition.note.isEmpty {
                     Text(model.audition.note)
                         .font(Theme.sans(11))
@@ -135,12 +138,14 @@ struct AuditionPane: View {
                         isOn: model.player.isPlaying,
                         ledColor: Theme.accent
                     ))
+                    .amberFocus(Theme.radiusPad)
 
                     Button("Keep") {
                         Task { await model.keep() }
                     }
                     .buttonStyle(DigKeyStyle())
                     .disabled(state.kept || model.audition.isKept)
+                    .amberFocus()
 
                     if let url = model.player.localFileURL {
                         Label("Drag to Ableton", systemImage: "square.and.arrow.up")
@@ -221,11 +226,78 @@ struct AuditionPane: View {
         VStack(alignment: .leading, spacing: 4) {
             InstrumentLabel(text: label, color: Theme.textMuted)
             Text(value)
-                .font(Theme.mono(11))
+                .font(Theme.monoStrong(11))
                 .foregroundStyle(Theme.textSecondary)
                 .lineLimit(1)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// One lane per separated stem, with the same drag-out as the master.
+    private func stems(state: AuditionState) -> some View {
+
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                InstrumentLabel(text: "STEMS")
+
+                if model.audition.isSeparating {
+                    LED(color: Theme.accent, size: 4)
+                    InstrumentLabel(text: "SEPARATING", color: Theme.accent)
+                }
+
+                Spacer()
+            }
+
+            if model.audition.stems.isEmpty {
+                Text(state.kept
+                     ? "Stems appear here when the download and separation finish."
+                     : "Keep the track to separate it into stems.")
+                    .font(Theme.sans(11))
+                    .foregroundStyle(Theme.textMuted)
+                    .padding(.horizontal, 10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(height: 30)
+                    .background(WellSurface(radius: Theme.radiusPad))
+            } else {
+                ForEach(model.audition.stems) { stem in
+                    HStack(spacing: 10) {
+                        LED(isOn: stem.exists,
+                            color: stem.exists ? Theme.statusSaved : Theme.statusError,
+                            size: 4)
+
+                        Text(stem.name.uppercased())
+                            .font(Theme.mono(10))
+                            .tracking(1.0)
+                            .foregroundStyle(Theme.textSecondary)
+
+                        Spacer()
+
+                        ZStack {
+                            if stem.exists {
+                                DragOutHandle(fileURL: stem.url)
+                            }
+
+                            HStack(spacing: 5) {
+                                Image(systemName: "square.and.arrow.up")
+                                    .font(.system(size: 9, weight: .medium))
+                                InstrumentLabel(text: "DRAG", color: Theme.textSecondary, tracking: 0.8)
+                            }
+                            .allowsHitTesting(false)
+
+                            .frame(width: 64, height: 22)
+                            .background(CapSurface(radius: Theme.radiusPad))
+                        }
+                        .frame(width: 64, height: 22)
+                    }
+                    .padding(.horizontal, 10)
+                    .frame(height: 30)
+                    .background(WellSurface(
+                        radius: Theme.radiusPad,
+                        tint: stem.exists ? Theme.statusSaved.opacity(0.04) : .clear
+                    ))
+                }
+            }
+        }
     }
 
     private func catalogue(state: AuditionState) -> some View {
@@ -322,6 +394,7 @@ struct AuditionColumn: View {
                         Task { await model.closeAudition() }
                     }
                     .buttonStyle(DigKeyStyle(dense: true))
+                    .amberFocus()
                 }
                 .padding(.horizontal, 12)
                 .frame(height: 44)

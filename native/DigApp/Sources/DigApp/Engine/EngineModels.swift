@@ -122,13 +122,39 @@ struct CrateTrack: Decodable, Identifiable {
     let localPath: String?
     let alsPath: String?
     let error: String?
+    let stems: [String: String]
 
     enum CodingKeys: String, CodingKey {
-        case id, username, filename, status, bpm, error
+        case id, username, filename, status, bpm, error, stems
         case virtualPath = "virtual_path"
         case localPath = "local_path"
         case alsPath = "als_path"
     }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        username = try container.decode(String.self, forKey: .username)
+        filename = try container.decode(String.self, forKey: .filename)
+        virtualPath = try container.decode(String.self, forKey: .virtualPath)
+        status = try container.decode(String.self, forKey: .status)
+        bpm = try container.decodeIfPresent(Double.self, forKey: .bpm)
+        localPath = try container.decodeIfPresent(String.self, forKey: .localPath)
+        alsPath = try container.decodeIfPresent(String.self, forKey: .alsPath)
+        error = try container.decodeIfPresent(String.self, forKey: .error)
+        stems = try container.decodeIfPresent([String: String].self, forKey: .stems) ?? [:]
+    }
+}
+
+/// One separated stem on disk.
+struct StemFile: Identifiable, Hashable {
+
+    let name: String
+    let path: String
+
+    var id: String { name }
+    var url: URL { URL(fileURLWithPath: path) }
+    var exists: Bool { FileManager.default.fileExists(atPath: path) }
 }
 
 struct CratePage: Decodable {

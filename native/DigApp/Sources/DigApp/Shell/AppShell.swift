@@ -56,6 +56,20 @@ struct AppShell: View {
                         }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    // The content sits in a case: a shadow gathers where it
+                    // meets the bezel on the top and left edges.
+                    .overlay(alignment: .top) {
+                        LinearGradient(colors: [Color.black.opacity(0.30), .clear],
+                                       startPoint: .top, endPoint: .bottom)
+                            .frame(height: 12)
+                            .allowsHitTesting(false)
+                    }
+                    .overlay(alignment: .leading) {
+                        LinearGradient(colors: [Color.black.opacity(0.22), .clear],
+                                       startPoint: .leading, endPoint: .trailing)
+                            .frame(width: 10)
+                            .allowsHitTesting(false)
+                    }
                 }
 
                 Divider().overlay(Theme.border)
@@ -97,6 +111,7 @@ struct Rail: View {
                     .font(.system(size: 13, weight: .medium))
             }
             .buttonStyle(DigIconKeyStyle(diameter: 32))
+            .amberFocus(16)
             .padding(.bottom, 14)
             .help("Settings")
         }
@@ -174,6 +189,7 @@ struct RailItem: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .amberFocus(Theme.radiusPanel)
         .onHover { hover = $0 }
         .animation(.easeInOut(duration: 0.12), value: hover)
     }
@@ -229,6 +245,7 @@ struct TopStrip: View {
             Image(systemName: symbol)
         }
         .buttonStyle(DigIconKeyStyle(diameter: 26))
+        .amberFocus(13)
         .help(help)
     }
 }
@@ -250,12 +267,18 @@ struct EmptyStatePane: View {
     var body: some View {
         VStack {
             VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 6) {
+                    LED(color: Theme.accent, size: 4)
+                    InstrumentLabel(text: "IDLE", color: Theme.textMuted)
+                }
+
                 Image(systemName: symbol)
                     .font(.system(size: 30, weight: .light))
                     .foregroundStyle(Theme.textSecondary)
 
                 Text(title)
-                    .font(Theme.sans(20, .semibold))
+                    .font(Theme.sans(19, .semibold))
+                    .tracking(-0.1)
                     .foregroundStyle(Theme.textPrimary)
 
                 Text(message)
@@ -264,10 +287,8 @@ struct EmptyStatePane: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             .padding(24)
-            .frame(maxWidth: 420, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: Theme.radiusPanel).fill(Theme.bgCard))
-            .overlay(RoundedRectangle(cornerRadius: Theme.radiusPanel)
-                .strokeBorder(Theme.border, lineWidth: 1))
+            .frame(maxWidth: 440, alignment: .leading)
+            .background(WellSurface(radius: Theme.radiusPanel))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.bgWorkspace)

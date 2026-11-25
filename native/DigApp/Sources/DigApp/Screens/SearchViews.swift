@@ -16,6 +16,7 @@ struct SearchColumn: View {
                     Task { await model.search.run() }
                 }
                 .buttonStyle(DigKeyStyle(dense: true))
+                .amberFocus()
                 .disabled(model.search.isSearching || model.search.term.isEmpty)
             }
             .padding(.horizontal, 12)
@@ -35,20 +36,26 @@ struct SearchColumn: View {
             }
 
             ScrollView {
-                LazyVStack(spacing: 0) {
-                    ForEach(model.search.results) { result in
-                        SearchResultRowView(
-                            result: result,
-                            isSelected: model.search.selectedID == result.id
-                        ) {
-                            model.search.selectedID = result.id
-                        } onPlay: {
-                            model.search.selectedID = result.id
-                            Task {
-                                await model.audition(user: result.username,
-                                                      folder: result.folder,
-                                                      file: result.asFile)
+                LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
+                    ForEach(model.search.groups) { group in
+                        Section {
+                            ForEach(group.results) { result in
+                                SearchResultRowView(
+                                    result: result,
+                                    isSelected: model.search.selectedID == result.id
+                                ) {
+                                    model.search.selectedID = result.id
+                                } onPlay: {
+                                    model.search.selectedID = result.id
+                                    Task {
+                                        await model.audition(user: result.username,
+                                                              folder: result.folder,
+                                                              file: result.asFile)
+                                    }
+                                }
                             }
+                        } header: {
+                            SearchGroupHeader(name: group.username, count: group.results.count)
                         }
                     }
 
@@ -84,6 +91,37 @@ struct SearchColumn: View {
             }
         }
         .background(Theme.bgCanvas)
+    }
+}
+
+/// A peer band that stays pinned while its results scroll: engraved name, count
+/// on the right, one line under it.
+struct SearchGroupHeader: View {
+
+    let name: String
+    let count: Int
+
+    var body: some View {
+        HStack(spacing: 8) {
+            LED(color: Theme.accent, size: 4)
+
+            Text(name)
+                .font(Theme.sans(11, .semibold))
+                .tracking(0.1)
+                .foregroundStyle(Theme.textSecondary)
+                .lineLimit(1)
+
+            Spacer()
+
+            Text("\(count)")
+                .font(Theme.monoStrong(10))
+                .foregroundStyle(Theme.textTertiary)
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 28)
+        .background(Material.chrome)
+        .overlay(alignment: .bottom) { Rectangle().fill(Color.black.opacity(0.5)).frame(height: 1) }
+        .overlay(alignment: .top) { PanelRim() }
     }
 }
 
@@ -178,6 +216,7 @@ struct SearchDetail: View {
                         Label("Audition", systemImage: "play.fill")
                     }
                     .buttonStyle(DigPrimaryKeyStyle())
+                    .amberFocus()
 
                     InstrumentLabel(
                         text: result.slotAvailable ? "SLOT FREE" : "QUEUE #\(result.queuePosition)",

@@ -17,6 +17,7 @@ struct CrateColumn: View {
                     Task { await model.crate.load() }
                 }
                 .buttonStyle(DigKeyStyle(dense: true))
+                .amberFocus()
             }
             .padding(.horizontal, 12)
             .frame(height: 44)
@@ -76,6 +77,16 @@ struct CrateRowView: View {
 
                 Spacer(minLength: 6)
 
+                HStack(spacing: 3) {
+                    ForEach(0..<4, id: \.self) { index in
+                        let stems = sortedStems
+
+                        LED(isOn: index < stems.count,
+                            color: index < stems.count ? Theme.statusSaved : Color(hex: 0x2F3335),
+                            size: 3.5)
+                    }
+                }
+
                 StatusChip(text: track.status, color: statusColor)
             }
             .padding(.horizontal, 12)
@@ -85,6 +96,10 @@ struct CrateRowView: View {
         }
         .buttonStyle(.plain)
         .onHover { hover = $0 }
+    }
+
+    private var sortedStems: [String] {
+        track.stems.keys.sorted()
     }
 
     private var statusColor: Color {
@@ -115,7 +130,10 @@ struct CrateDetail: View {
                         StatusChip(text: track.status, color: statusColor(track.status))
 
                         if let bpm = track.bpm {
-                            InstrumentLabel(text: String(format: "%.1f BPM", bpm))
+                            Text(String(format: "%.1f BPM", bpm))
+                                .font(Theme.monoStrong(10))
+                                .tracking(0.6)
+                                .foregroundStyle(Theme.textTertiary)
                         }
                     }
 
@@ -132,17 +150,52 @@ struct CrateDetail: View {
                             Label("Separate now", systemImage: "scissors")
                         }
                         .buttonStyle(DigPrimaryKeyStyle())
+                        .amberFocus()
 
                         if let path = track.alsPath, !path.isEmpty {
                             Button("Open in Live") {
                                 NSWorkspace.shared.open(URL(fileURLWithPath: path))
                             }
                             .buttonStyle(DigKeyStyle())
+                            .amberFocus()
 
                             Button("Reveal") {
                                 NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
                             }
                             .buttonStyle(DigKeyStyle())
+                        }
+                    }
+
+                    if !track.stems.isEmpty {
+                        VStack(alignment: .leading, spacing: 6) {
+                            InstrumentLabel(text: "STEMS")
+
+                            ForEach(track.stems.keys.sorted(), id: \.self) { name in
+                                HStack(spacing: 10) {
+                                    LED(isOn: true, color: Theme.statusSaved, size: 4)
+
+                                    Text(name.uppercased())
+                                        .font(Theme.mono(10))
+                                        .tracking(1.0)
+                                        .foregroundStyle(Theme.textSecondary)
+
+                                    Spacer()
+
+                                    if let path = track.stems[name] {
+                                        Button("Reveal") {
+                                            NSWorkspace.shared.activateFileViewerSelecting(
+                                                [URL(fileURLWithPath: path)])
+                                        }
+                                        .buttonStyle(DigKeyStyle(dense: true))
+                                    }
+                                }
+                                .padding(.horizontal, 10)
+                                .frame(height: 30)
+                                .background(WellSurface(
+                                    radius: Theme.radiusPad,
+                                    tint: Theme.statusSaved.opacity(0.04)
+                                ))
+                            }
                         }
                     }
 

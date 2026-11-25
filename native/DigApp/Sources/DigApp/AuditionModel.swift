@@ -17,6 +17,8 @@ final class AuditionModel {
     var note = ""
     var keptTrackID = ""
     var keptStatus = ""
+    var stems: [StemFile] = []
+    var isSeparating = false
 
     private var refreshTask: Task<Void, Never>?
 
@@ -31,6 +33,8 @@ final class AuditionModel {
         note = ""
         keptTrackID = ""
         keptStatus = ""
+        stems = []
+        isSeparating = false
         isStarting = true
     }
 

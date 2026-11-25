@@ -165,6 +165,7 @@ struct LED: View {
                 }
             }
             .shadow(color: isOn ? color.opacity(0.55) : .clear, radius: 4)
+            .animation(.easeOut(duration: 0.12), value: isOn)
     }
 }
 

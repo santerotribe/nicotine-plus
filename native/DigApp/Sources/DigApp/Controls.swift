@@ -217,6 +217,36 @@ struct DigIconKeyStyle: ButtonStyle {
     }
 }
 
+// MARK: - Focus
+
+/// Amber focus ring. The ring follows the control's own focus state, so it
+/// appears with macOS keyboard navigation and never interferes with clicks.
+struct AmberFocusRing: ViewModifier {
+
+    var radius: CGFloat
+    @FocusState private var focused: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .focused($focused)
+            .focusEffectDisabled()
+            .overlay {
+                RoundedRectangle(cornerRadius: radius)
+                    .strokeBorder(Theme.accent.opacity(focused ? 0.9 : 0), lineWidth: 2)
+                    .padding(-3)
+                    .allowsHitTesting(false)
+            }
+            .animation(.easeOut(duration: 0.1), value: focused)
+    }
+}
+
+extension View {
+
+    func amberFocus(_ radius: CGFloat = Theme.radiusKey) -> some View {
+        modifier(AmberFocusRing(radius: radius))
+    }
+}
+
 // MARK: - Labels and chips
 
 /// Instrument register label: mono, upper case, tracked, with an engraved edge.

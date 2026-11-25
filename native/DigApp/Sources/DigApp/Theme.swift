@@ -83,7 +83,13 @@ enum Theme {
     }
 
     static func mono(_ size: CGFloat) -> Font {
-        Font(namedFont("IBM Plex Mono", size: size))
+        Font(namedFont("IBMPlexMono-Regular", size: size))
+    }
+
+    /// Readouts carry more weight than labels: Plex Mono Medium when the extra
+    /// face is registered, the regular face otherwise.
+    static func monoStrong(_ size: CGFloat) -> Font {
+        Font(namedFont("IBMPlexMono-Medium", size: size))
     }
 
     static func sansFont(_ size: CGFloat, _ weight: Font.Weight = .regular) -> CTFont {
@@ -109,6 +115,9 @@ enum Theme {
 
     private static let fontCache = Mutex<[FontKey: CTFont]>([:])
 
+    /// Core Text names the bundled mono faces "IBMPlexMono-Regular" and
+    /// "IBMPlexMono-Medium"; the family name alone does not resolve, and a
+    /// silent fallback would quietly render SF Mono instead.
     private static func namedFont(_ name: String, size: CGFloat) -> NSFont {
         NSFont(name: name, size: size) ?? NSFont.monospacedSystemFont(ofSize: size, weight: .regular)
     }
@@ -147,7 +156,7 @@ enum Theme {
             return
         }
 
-        for file in files where file.pathExtension == "woff2" {
+        for file in files where file.pathExtension == "woff2" || file.pathExtension == "ttf" {
             var error: Unmanaged<CFError>?
             CTFontManagerRegisterFontsForURL(file as CFURL, .process, &error)
         }

@@ -26,6 +26,14 @@ struct Transport: View {
                         InstrumentLabel(text: model.player.badge.isEmpty ? "IDLE" : model.player.badge,
                                         color: model.player.badge.isEmpty ? Theme.textMuted : Theme.textTertiary)
 
+                        if let state = model.audition.state,
+                           state.peer.queuePosition > 0,
+                           state.source?.kind != .local {
+                            Text("#" + String(state.peer.queuePosition))
+                                .font(Theme.monoStrong(10))
+                                .foregroundStyle(state.peer.percent > 0 ? Theme.accent : Theme.textTertiary)
+                        }
+
                         if !model.player.errorText.isEmpty {
                             Text(model.player.errorText)
                                 .font(Theme.sans(10))
@@ -47,7 +55,7 @@ struct Transport: View {
                 .background(WellSurface(radius: Theme.radiusPad))
 
                 Text(TimeFormat.clock(position) + " / " + TimeFormat.clock(duration))
-                    .font(Theme.mono(11))
+                    .font(Theme.monoStrong(11))
                     .foregroundStyle(Theme.textTertiary)
                     .monospacedDigit()
                     .padding(.horizontal, 8)
@@ -106,6 +114,7 @@ struct Transport: View {
         }
         .buttonStyle(DigIconKeyStyle(diameter: 32, isOn: model.player.isPlaying,
                                      activeInk: Theme.accent))
+        .amberFocus(16)
         .help(model.player.isPlaying ? "Pause" : "Play")
     }
 
@@ -120,6 +129,7 @@ struct Transport: View {
         .buttonStyle(DigPrimaryKeyStyle())
         .disabled(model.audition.isKept)
         .opacity(model.audition.isKept ? 0.55 : 1)
+        .amberFocus()
         .help(model.audition.isKept ? "Already in the crate" : "Add to the crate and separate")
     }
 
@@ -156,6 +166,7 @@ struct Transport: View {
                 .font(.system(size: 10, weight: .semibold))
         }
         .buttonStyle(DigIconKeyStyle(diameter: 26))
+        .amberFocus(13)
         .help("Close the audition")
     }
 }

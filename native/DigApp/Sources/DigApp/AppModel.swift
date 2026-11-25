@@ -51,6 +51,7 @@ final class AppModel {
     var crate = CrateModel()
 
     private var eventTask: Task<Void, Never>?
+    private var stemTask: Task<Void, Never>?
     private var loadedLocation = ""
     private var loadedSessionID = ""
 
@@ -99,6 +100,7 @@ final class AppModel {
 
     func shutdown() {
         eventTask?.cancel()
+        stemTask?.cancel()
         supervisor.stop()
     }
 
@@ -290,6 +292,7 @@ final class AppModel {
             try? await client.closeAudition(id: id)
         }
 
+        stemTask?.cancel()
         audition.clear()
         player.stop()
         loadedSessionID = ""
@@ -305,10 +308,42 @@ final class AppModel {
             audition.keptTrackID = track.id
             audition.keptStatus = track.status
             audition.note = "Kept — separating when the download lands"
+            audition.isSeparating = true
             await crate.load()
+            watchStems(trackID: track.id)
 
         } catch {
             audition.error = error.localizedDescription
+        }
+    }
+
+    /// Stems arrive after the download and the separation run; watch the crate
+    /// until they exist instead of making the user refresh.
+    private func watchStems(trackID: String) {
+
+        stemTask?.cancel()
+        stemTask = Task { [weak self] in
+
+            for _ in 0..<120 {
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+
+                guard let self, let client = self.client else { return }
+
+                guard let page = try? await client.crate(),
+                      let track = page.tracks.first(where: { $0.id == trackID }) else {
+                    continue
+                }
+
+                self.audition.keptStatus = track.status
+                self.audition.isSeparating = track.stems.isEmpty
+                self.audition.stems = track.stems
+                    .map { StemFile(name: $0.key, path: $0.value) }
+                    .sorted { $0.name < $1.name }
+
+                if !track.stems.isEmpty || track.status == "failed" {
+                    return
+                }
+            }
         }
     }
 }

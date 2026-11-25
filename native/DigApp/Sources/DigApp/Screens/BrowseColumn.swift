@@ -22,6 +22,7 @@ struct BrowseColumn: View {
                     Image(systemName: "arrow.clockwise")
                 }
                 .buttonStyle(DigIconKeyStyle(diameter: 26))
+                .amberFocus(13)
                 .help("Re-browse this peer")
             }
             .padding(.horizontal, 12)
@@ -68,6 +69,7 @@ struct BrowseColumn: View {
                     Task { await model.browse(user: name) }
                 }
                 .buttonStyle(DigKeyStyle(dense: true))
+                .amberFocus()
                 .disabled(newUser.trimmingCharacters(in: .whitespaces).isEmpty)
             }
             .padding(.horizontal, 12)

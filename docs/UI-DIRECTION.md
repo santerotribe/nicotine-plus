@@ -370,13 +370,31 @@ No glowing text, no gradients across large surfaces, no drop shadows on rows, no
 coloured chip fills (the colour lives in the LED), no textures or noise, never
 two lit caps on one screen.
 
-### Known next candidates (not done)
+### The ten upgrades (2026-11-25, after the first control pass)
 
-- Amber **focus rings** for every key (the keyboard path has no focus cue yet).
-- The play key should fade its LED on state change (100 ms), not snap.
-- A **stems lane** under the waveform once separation lands, with one LED per
-  stem and the same instrument register.
-- Peer queue readout in the transport when the source is queued (mono, amber
-  when it starts moving).
-- Empty states as inset displays with an LED rather than a plain card.
+1. **Amber focus rings** on every key, via `amberFocus()`. The ring follows the
+   control's own focus state, so it appears with macOS keyboard navigation and
+   never intercepts clicks.
+2. **LED fades**: 120 ms ease-out on every LED, so a light does not snap.
+3. **Stem lanes** under the waveform: one row per stem with a presence LED and a
+   drag cap, fed by a crate watcher that starts on Keep and polls until the
+   separation lands. The crate detail lists the same stems with Reveal.
+4. **Peer queue readout** in the transport: `#1055` in Plex Mono Medium, amber
+   once bytes move.
+5. **Crate rows** carry four stem LEDs next to the status chip.
+6. **Empty states** are inset displays with a status LED and an `IDLE` legend,
+   not plain cards.
+7. **Search results** are grouped under pinned peer headers: engraved name, LED,
+   result count, hairline under.
+8. **Keyboard scroll-into-view**: the file list follows the selection.
+9. **Panel bezel**: an inner shadow along the top and left of the content area,
+   where it meets the case.
+10. **Plex Mono Medium** is bundled and used for readouts (`monoStrong`). This
+    also fixed a silent bug: the family name "IBM Plex Mono" does not resolve by
+    `NSFont(name:)`, so every instrument label had been falling back to SF Mono.
+    The faces are `IBMPlexMono-Regular` and `IBMPlexMono-Medium`.
+
+Remaining candidates: the LED could blink while a peer is queueing (hardware
+"working" cue), the playhead could carry a peak-hold tick, and the window itself
+still has stock macOS chrome around the bezel.
 

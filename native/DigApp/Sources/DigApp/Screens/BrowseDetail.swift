@@ -70,6 +70,7 @@ struct BrowseDetail: View {
                 Task { await model.browse.browse(user: user) }
             }
             .buttonStyle(DigKeyStyle(dense: true))
+            .amberFocus()
         }
         .padding(.horizontal, 16)
         .frame(height: 68)
@@ -108,28 +109,38 @@ struct BrowseDetail: View {
 
             Divider().overlay(Theme.border)
 
-            ScrollView {
-                LazyVStack(spacing: 0) {
-                    ForEach(model.browse.filteredFiles) { file in
-                        FileRowView(
-                            file: file,
-                            isSelected: selectedFile == file.id,
-                            isPlaying: model.player.title == file.name
-                                && model.player.isPlaying
-                        ) {
-                            selectedFile = file.id
-                        } onPlay: {
-                            selectedFile = file.id
-                            Task { await audition(file) }
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(model.browse.filteredFiles) { file in
+                            FileRowView(
+                                file: file,
+                                isSelected: selectedFile == file.id,
+                                isPlaying: model.player.title == file.name
+                                    && model.player.isPlaying
+                            ) {
+                                selectedFile = file.id
+                            } onPlay: {
+                                selectedFile = file.id
+                                Task { await audition(file) }
+                            }
+                            .id(file.id)
+                        }
+
+                        if model.browse.files.count < model.browse.fileTotal {
+                            Button("Load more") {
+                                Task { await model.browse.loadMoreFiles() }
+                            }
+                            .buttonStyle(DigKeyStyle(dense: true))
+                            .padding(.vertical, 10)
                         }
                     }
+                }
+                .onChange(of: selectedFile) { _, newValue in
+                    guard let newValue else { return }
 
-                    if model.browse.files.count < model.browse.fileTotal {
-                        Button("Load more") {
-                            Task { await model.browse.loadMoreFiles() }
-                        }
-                        .buttonStyle(DigKeyStyle(dense: true))
-                        .padding(.vertical, 10)
+                    withAnimation(.easeOut(duration: 0.12)) {
+                        proxy.scrollTo(newValue, anchor: .center)
                     }
                 }
             }

@@ -328,6 +328,12 @@ archive. The rules and the reference sheet are in
 [UI-DIRECTION.md §12](UI-DIRECTION.md) and
 `docs/assets/ui-references-2026-11-25.png`.
 
+The follow-up pass added the ten upgrades listed there: focus rings, LED fades,
+stem lanes with drag-out, the peer queue readout, crate stem LEDs, inset empty
+states, pinned search group headers, keyboard scroll-into-view, the content
+bezel, and Plex Mono Medium for readouts (which also fixed every mono label
+silently falling back to SF Mono).
+
 What works: paged browse (peers → folders → files, Enter auditions, ↑/↓ moves),
 the persistent instrument transport, AVAudioEngine playback from
 `/audition` (local share, peer partial, or a catalogue URL downloaded once),

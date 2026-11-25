@@ -55,6 +55,14 @@ struct SearchResultsPage: Decodable {
     let results: [SearchResultRow]
 }
 
+struct SearchGroup: Identifiable {
+
+    let username: String
+    let results: [SearchResultRow]
+
+    var id: String { username }
+}
+
 @MainActor
 @Observable
 final class SearchModel {
@@ -70,6 +78,23 @@ final class SearchModel {
 
     var selected: SearchResultRow? {
         results.first { $0.id == selectedID }
+    }
+
+    /// Peers in first-appearance order, so the list stays stable as results land.
+    var groups: [SearchGroup] {
+
+        var order: [String] = []
+        var buckets: [String: [SearchResultRow]] = [:]
+
+        for result in results {
+            if buckets[result.username] == nil {
+                order.append(result.username)
+            }
+
+            buckets[result.username, default: []].append(result)
+        }
+
+        return order.map { SearchGroup(username: $0, results: buckets[$0] ?? []) }
     }
 
     func run() async {
