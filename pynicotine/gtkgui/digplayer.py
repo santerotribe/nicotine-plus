@@ -979,6 +979,11 @@ class DigPlayer:
             self._set_status(f"native drag unavailable: {reason}", sticky_seconds=8)
 
     def _on_native_drag_clicked(self, *_args) -> None:
+        # With the native overlay in place, real presses never reach GTK here.
+        if self._drag_overlay is not None:
+            self._native_drag()
+            return
+
         self._native_drag()
 
     def _on_drag_prepare(self, _source, _x, _y):
@@ -1181,10 +1186,16 @@ class DigPlayer:
             # there decodes nothing and used to kill playback outright.
             self.player.seek(max(0.0, buffered - 0.5), reload=False)
             self.peer.resume()
-            from pynicotine.logfacility import log
+            import time as _time
 
-            log.add(f"Digging: seek to {target:.0f}s clamped to {buffered:.0f}s "
-                    f"({self.peer.bytes}/{self.peer.size} bytes downloaded)")
+            now = _time.monotonic()
+
+            if now - getattr(self, "_clamp_logged_at", 0.0) > 1.5:
+                from pynicotine.logfacility import log
+
+                self._clamp_logged_at = now
+                log.add(f"Digging: seek to {target:.0f}s clamped to {buffered:.0f}s "
+                        f"({self.peer.bytes}/{self.peer.size} bytes downloaded)")
             self._set_status("that part is still downloading — waiting for the peer", sticky_seconds=6)
             self._update_labels()
             self.waveform.queue_draw()
