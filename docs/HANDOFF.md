@@ -9,7 +9,10 @@ keep them, separate stems and land them in Ableton Live.
 
 The long-term direction is a **native SwiftUI client** talking to this Python
 engine over a local API. The engine boundary already exists; see
-[ENGINE-API.md](ENGINE-API.md).
+[ENGINE-API.md](ENGINE-API.md). The client's look and structure are specified in
+[UI-DIRECTION.md](UI-DIRECTION.md): arcaNative's design system
+(`/Users/santero-tribe/Schema Apps/arcaNative`) on the reference's three-column
+skeleton.
 
 ---
 
@@ -257,6 +260,12 @@ paging exists so a native front end can virtualise.
 5. **SwiftUI spike** — window with user browse (paged), a player driven by
    `/audition` + AVAudioEngine, and a drag surface; launch the Python engine as a
    child process. Evaluate before committing to the full native shell.
+   **Follow [UI-DIRECTION.md](UI-DIRECTION.md)**: arcaNative's tokens (Manrope +
+   IBM Plex Mono, graphite surfaces, gold accent, 120 ms motion), the reference's
+   rail → list → detail skeleton, a persistent 48 pt instrument transport, hairline
+   depth only. Port arca's *values*, never its source (GPL vs a separate product).
+   arcaNative is also the architectural precedent: it is a SwiftUI shell driving a
+   Python engine over HTTP, already built.
 6. **Polish** — remove the chip fallback if the overlay is reliable, GTK3 audit,
    i18n pass.
 
