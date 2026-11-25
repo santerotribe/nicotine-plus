@@ -17,9 +17,14 @@ def _settings(tmp_path):
 
 def test_sweep_removes_orphan_previews(tmp_path):
 
+    import os
+    import time
+
     settings = _settings(tmp_path)
     stray = settings.work_path / "previews" / "stray.mp3"
     stray.write_bytes(b"x" * 2048)
+    old = time.time() - 3600
+    os.utime(stray, (old, old))
     export = settings.work_path / "exports" / "old.wav"
     export.write_bytes(b"y" * 1024)
 
@@ -30,6 +35,23 @@ def test_sweep_removes_orphan_previews(tmp_path):
     assert not stray.exists()
     # exports are only evicted over budget, so this one stays
     assert export.exists()
+
+
+def test_sweep_protects_incomplete_files(tmp_path):
+
+    settings = _settings(tmp_path)
+    partial = settings.work_path / "previews" / "INCOMPLETEabc123"
+    partial.write_bytes(b"x" * 4096)
+
+    import os
+    import time
+
+    old = time.time() - 3600
+    os.utime(partial, (old, old))
+
+    sweep(settings)
+
+    assert partial.exists()
 
 
 def test_wipe_clears_everything(tmp_path):

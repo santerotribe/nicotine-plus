@@ -19,8 +19,6 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from pathlib import Path
-
 from pynicotine.digging.renderers.base import (
     ProgressCallback,
     RenderError,

@@ -48,6 +48,7 @@ class PeerPreview:
 
         self.on_update = None       # callable(preview) - called on every progress tick
         self.on_audio_ready = None  # callable(preview) - enough bytes to play
+        self.on_promoted = None     # callable(path) - kept file copied to downloads
 
     # -- lifecycle --------------------------------------------------------
 
@@ -194,6 +195,10 @@ class PeerPreview:
             log.add(f"Digging: kept {source.name} -> {target}")
 
         self.promote_to = None
+
+        if self.on_promoted is not None:
+            self.on_promoted(target)
+
         return target
 
 

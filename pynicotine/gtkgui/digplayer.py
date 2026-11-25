@@ -52,6 +52,9 @@ class DigPlayer:
         self.peer = None
         self._peer_duration_hint = 0.0
         self._peer_extend_at = 0.0
+        self._peer_resume_at = 0.0
+        self._peer_last_bytes = 0
+        self._drag_start_x = 0.0
         self._playing_peer = False
         self._timer_id = None
         self._token = 0
@@ -517,6 +520,10 @@ class DigPlayer:
         if token != self._token:
             return False
 
+        if self._playing_peer:
+            # The peer's own file is already playing; do not swap it out
+            return False
+
         self.status_label.set_text(f"loading {candidate.source} audio…")
 
         def work() -> None:
@@ -681,6 +688,25 @@ class DigPlayer:
         except Exception as error:  # noqa: BLE001 - surface the reason in the UI
             self.status_label.set_text(f"keep failed: {error}")
             return
+
+        if self.peer is not None:
+            def on_promoted(path, kept=track):
+
+                def apply():
+                    try:
+                        from pynicotine.digging.actions import record_local_path
+
+                        record_local_path(kept, str(path))
+                        self.status_label.set_text(f"kept {kept.filename} — saved to downloads")
+
+                    except Exception:  # noqa: BLE001
+                        pass
+
+                    return False
+
+                GLib.idle_add(apply)
+
+            self.peer.on_promoted = on_promoted
 
         self.status_label.set_text(f"kept {track.filename} — downloading and queueing separation")
 

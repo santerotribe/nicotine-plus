@@ -11,7 +11,8 @@ import zipfile
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Protocol
+from collections.abc import Callable
+from typing import Protocol
 
 from pynicotine.digging.settings import STEM_PRESETS
 

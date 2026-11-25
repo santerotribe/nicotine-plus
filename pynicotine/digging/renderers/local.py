@@ -9,8 +9,6 @@ import shutil
 import subprocess
 import sys
 
-from pathlib import Path
-
 from pynicotine.digging.renderers.base import (
     ProgressCallback,
     RenderError,

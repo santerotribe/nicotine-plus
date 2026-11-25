@@ -79,18 +79,37 @@ def sweep(settings: DiggingSettings | None = None, core=None) -> SweepReport:
 
             report.transfers_removed += 1
 
-    # Files still referenced by a live transfer stay
+    # Files still referenced by a live transfer stay. A transfer writes into an
+    # INCOMPLETE<md5> file, so both names must be protected.
     active_names: set[str] = set()
 
     if core is not None:
         for transfer in core.downloads.transfers.values():
-            if Path(transfer.folder_path or "") == previews:
-                active_names.add(Path(transfer.virtual_path).name)
+            if Path(transfer.folder_path or "") != previews:
+                continue
+
+            active_names.add(Path(transfer.virtual_path).name)
+            handle = getattr(transfer, "file_handle", None)
+
+            if handle is not None:
+                name = handle.name
+
+                if isinstance(name, bytes):
+                    name = name.decode("utf-8", "replace")
+
+                active_names.add(Path(name).name)
+
+    import time as _time
+
+    recent = _time.time() - 300
 
     if previews.is_dir():
         for path in previews.rglob("*"):
             try:
                 if not path.is_file() or path.name in active_names:
+                    continue
+
+                if path.name.startswith("INCOMPLETE") or path.stat().st_mtime > recent:
                     continue
 
                 size = path.stat().st_size

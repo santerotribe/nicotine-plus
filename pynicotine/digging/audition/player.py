@@ -110,6 +110,7 @@ class Player:
         self._duration_hint = 0.0
         self._peaks_cache = None
         self._peaks_frames = -1
+        self._peaks_time = 0.0
         self._stream_source = ""
         self._fade = None
         self._adopt_gain = 1.0
@@ -171,6 +172,15 @@ class Player:
         file does not produce a click or a hole.
         """
 
+        # Measure loudness before touching the lock: the audio callback is
+        # mixing and must not wait on RMS math over a long buffer.
+        old_buffer_for_gain = self._buffer
+        old_audio_for_gain = self._audio
+        incoming_gain = 1.0
+
+        if fade_seconds > 0 and (old_buffer_for_gain is not None or old_audio_for_gain is not None):
+            incoming_gain = self._match_gain(old_buffer_for_gain, old_audio_for_gain, buffer)
+
         with self._lock:
             old_buffer = self._buffer
             old_audio = self._audio
@@ -178,8 +188,6 @@ class Player:
             old_gain = 1.0
 
             if fade_seconds > 0 and (old_buffer is not None or old_audio is not None):
-                incoming_gain = self._match_gain(old_buffer, old_audio, buffer)
-
                 self._fade = {
                     "buffer": old_buffer,
                     "audio": old_audio,

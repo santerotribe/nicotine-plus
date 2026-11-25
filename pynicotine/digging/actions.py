@@ -24,6 +24,20 @@ class TrackSource:
         return "\\".join([self.folder_path, self.filename])
 
 
+def record_local_path(track: CrateTrack, path: str,
+                      settings: DiggingSettings | None = None) -> None:
+
+    settings = settings or DiggingSettings.load()
+    crate = crate_for(settings)
+    track.local_path = str(path)
+
+    for entry in crate.tracks:
+        if entry.id == track.id:
+            entry.local_path = str(path)
+
+    crate.save()
+
+
 def crate_for(settings: DiggingSettings | None = None) -> Crate:
     settings = settings or DiggingSettings.load()
     settings.ensure_dirs()

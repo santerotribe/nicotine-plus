@@ -35,7 +35,10 @@ class AudioBuffer:
         self.base_frames = max(0, int(start_offset * sample_rate))
         self._done = False
         self._error = ""
-        capacity = max(sample_rate * 30, int(max(0.0, duration_hint) * sample_rate) + sample_rate)
+        # Preallocate for the hint, but cap it: a two-hour DJ mix would otherwise
+        # allocate ~1.2 GB up front. Growth beyond the cap happens on demand.
+        capped_hint = min(max(0.0, duration_hint), 20 * 60)
+        capacity = max(sample_rate * 30, int(capped_hint * sample_rate) + sample_rate)
         self._data = np.zeros((capacity, channels), dtype="float32")
 
     def _ensure_capacity(self, frames: int) -> None:
