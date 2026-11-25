@@ -1,6 +1,6 @@
 # Handoff — Nicotine+ fork with digging workflow
 
-Last updated: 2026-11-25 · branch `main-ours` · 41 commits ahead of `origin/master`
+Last updated: 2026-11-25 · branch `main-ours` · 43 commits ahead of `origin/master`
 
 This is a working fork of [Nicotine+](https://github.com/nicotine-plus/nicotine-plus)
 (Python 3.11+, GTK 4 via PyGObject, GPL-3.0-or-later) extended into a
@@ -49,7 +49,7 @@ NICOTINE_API_PORT=8766 NICOTINE_API_TOKEN=devtoken \
 Tests and lint:
 
 ```sh
-XDG_CONFIG_HOME=/tmp/digcfg .venv/bin/python -m pytest pynicotine/tests -q   # 131 passed, 1 skipped
+XDG_CONFIG_HOME=/tmp/digcfg .venv/bin/python -m pytest pynicotine/tests -q   # 165 passed, 1 skipped
 .venv/bin/python -m pylint --rcfile=pyproject.toml pynicotine/digging pynicotine/gtkgui/digplayer.py
 ```
 
@@ -99,7 +99,14 @@ XDG_CONFIG_HOME=/tmp/digcfg .venv/bin/python -m pytest pynicotine/tests -q   # 1
 
 ### API side — `pynicotine/engineapi/`
 
-`server.py` (token-protected HTTP/JSON on loopback) and `serialize.py`.
+| Module | Responsibility |
+|---|---|
+| `server.py` | token-protected HTTP/JSON on loopback, routing, main-thread dispatch |
+| `serialize.py` | raw JSON shapes (files, transfers, crate tracks) |
+| `hub.py` | Server-Sent Events hub: state snapshot, transfer coalescing, browse settle, listener guard |
+| `searchstore.py` | engine-side search results for API searches, paged by user/folder |
+| `audition.py` | audition sessions: peer preview + catalogue, resolved playback source, keep |
+
 Browse paging lives in the engine: `UserBrowse.user_summary/folder_page/file_page`
 in `pynicotine/userbrowse.py`, plus browse latency logging:
 
@@ -147,6 +154,16 @@ Browse: <user> answered in 1.24s (N folders, M files, message 1)
   files, protects `INCOMPLETE*` files of live transfers, and trims caches.
 - Kept downloads are promoted into `digging/downloads/<user>/` and are never swept.
 
+**API-driven audition (no GTK window)**
+- `POST /audition` starts the peer preview and catalogue lookups; nothing is
+  played by the engine.
+- `source` prefers the real file (local → peer partial → catalogue URL), and the
+  peer's byte count is the readable horizon for a native player.
+- `DELETE /audition/<id>` pauses the preview and triggers a **throttled** preview
+  sweep (once a minute, engine thread), because a native-only client never opens
+  the Dig window that used to do the housekeeping.
+- Idle sessions are reaped after 30 minutes.
+
 ---
 
 ## 4. Known issues / technical debt
@@ -180,19 +197,46 @@ Browse: <user> answered in 1.24s (N folders, M files, message 1)
 ## 5. Engine API (current)
 
 ```
-GET  /health                                  (no token)
-GET  /state
-GET  /users/<u>/summary
-GET  /users/<u>/folders?offset=&limit=
-GET  /users/<u>/files?folder=&offset=&limit=
-POST /users/<u>/browse
-GET  /downloads?offset=&limit=
-GET  /crate
-POST /crate/<id>/separate
+GET    /health                                (no token)
+GET    /state
+GET    /events                                Server-Sent Events push channel
+GET    /users/<u>/summary
+GET    /users/<u>/folders?offset=&limit=
+GET    /users/<u>/files?folder=&offset=&limit=
+POST   /users/<u>/browse
+GET    /downloads?offset=&limit=
+GET    /crate
+POST   /crate/<id>/separate
+GET    /search                                tracked searches
+POST   /search                                {"term","mode","room","users"}
+GET    /search/<t>                            counters
+GET    /search/<t>/results?offset=&limit=
+GET    /search/<t>/users?offset=&limit=
+GET    /search/<t>/files?user=&folder=&offset=&limit=
+POST   /search/<t>/stop
+DELETE /search/<t>
+GET    /audition                              active sessions
+POST   /audition                              {"username","virtual_path","size","duration","attributes"}
+GET    /audition/<id>                         resolved playback source
+POST   /audition/<id>/keep
+DELETE /audition/<id>
 ```
 
-Auth: `Authorization: Bearer <NICOTINE_API_TOKEN>` (loopback only).
-Full contract: [ENGINE-API.md](ENGINE-API.md).
+Auth: `Authorization: Bearer <NICOTINE_API_TOKEN>` (loopback only; `/events`
+also accepts `?token=` because EventSource cannot set headers).
+Full contract with payloads and a worked curl session: [ENGINE-API.md](ENGINE-API.md).
+
+Three things a native client can now rely on:
+
+- **`/events`** pushes login, browse (with a `done` flag), coalesced transfer
+  progress, search arrivals and crate/pipeline status. Slow clients lose the
+  oldest events and get a `gap` marker; the engine never blocks.
+- **`/search`** keeps results in the engine, grouped by peer and folder, paged
+  like browse. Only API-started searches are tracked, and they do not open a GTK
+  tab (`do_search(..., notify_frontend=False)`).
+- **`/audition`** returns the file to open right now (`local` → `peer` partial →
+  `catalogue` URL) plus the peer-preview lifecycle, so AVAudioEngine can replace
+  PortAudio. The GTK player is untouched.
 
 ### Why the API / paging matters
 
@@ -205,18 +249,32 @@ paging exists so a native front end can virtualise.
 
 ## 6. Next steps (in order)
 
-1. **`GET /events` (SSE)** — login state, browse completion, transfer progress,
-   pipeline/crate changes. Removes polling from the native app.
-2. **`/search`** — start a search, page results, stream arrivals.
-3. **Playback handoff endpoint** — return the resolved audition source (catalogue
-   URL vs peer file) and preview lifecycle so AVAudioEngine can replace PortAudio.
-4. **Transfer controls + settings API** — pause/resume/cancel/keep, digging config
-   read/write.
-5. **SwiftUI spike** — window with user browse (paged), player + waveform, and a
-   drag surface; launch the Python engine as a child process. Evaluate before
-   committing to the full native shell.
-6. **Polish** — remove the chip fallback if the overlay is reliable, add API tests,
-   GTK3 audit, i18n pass.
+1. ~~**`GET /events` (SSE)**~~ — done (login, browse, transfers, search, crate).
+2. ~~**`/search`**~~ — done (engine-side results, paged by peer/folder).
+3. ~~**Playback handoff**~~ — done (`/audition`: resolved source + peer lifecycle).
+4. **Transfer controls + settings API** — pause/resume/cancel/keep on
+   `/downloads/<id>`, digging config read/write (`/settings`).
+5. **SwiftUI spike** — window with user browse (paged), a player driven by
+   `/audition` + AVAudioEngine, and a drag surface; launch the Python engine as a
+   child process. Evaluate before committing to the full native shell.
+6. **Polish** — remove the chip fallback if the overlay is reliable, GTK3 audit,
+   i18n pass.
+
+### Lesson from this session (important)
+
+`events.emit()` treats **any** exception in a listener as fatal: it calls
+`core.quit()` and re-raises. A wrong callback signature in the API layer
+therefore killed the whole client — `abort-download` emits
+`(transfer, status, update_parent)` while `update-download` emits
+`(transfer, update_parent)`, and an API listener with two parameters quit the
+app on every cancelled preview. Two defences now exist and must be kept:
+
+- every API listener is wrapped in `engineapi.hub.guard`, which logs and drops
+  exceptions instead of letting them reach `events.emit`;
+- `hub._on_transfer(transfer, *_args)` accepts every arity.
+
+If you add an engine listener for the API, wrap it in `guard()` and accept
+loose arguments.
 
 ---
 
@@ -225,6 +283,13 @@ paging exists so a native front end can virtualise.
 - The app is a GApplication single instance on **port 2234**. Before starting,
   free the port:
   `lsof -nP -iTCP:2234 -sTCP:LISTEN | tail -n +2 | awk '{print $2}' | xargs kill`
+- The engine API holds **127.0.0.1:8766**. If a stale instance survives a kill,
+  `/health` answers while the new app logs `Engine API could not start: Address
+  already in use` — check both ports:
+  `lsof -nP -iTCP:8766 -sTCP:LISTEN` and kill that PID too.
+- API code changes need a full app restart; the server is a plain ThreadingHTTPServer.
+- Verify the API without the GUI: `curl -s http://127.0.0.1:8766/health`, then
+  `curl -N -H 'Authorization: Bearer devtoken' http://127.0.0.1:8766/events`.
 - Always `cd` into the repo in a fresh terminal before launching; terminals in
   this environment have been taken over/left in odd states before.
 - If startup hangs and no "Loaded GTK" line appears, run with `--ci-mode` to get

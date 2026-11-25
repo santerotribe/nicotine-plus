@@ -193,6 +193,9 @@ EVENT_NAMES = {
     "uploads-shutdown-request",
     "uploads-shutdown-cancel",
 
+    # Digging (this fork)
+    "digging-status",
+
     # User info
     "user-info-failed",
     "user-info-progress",

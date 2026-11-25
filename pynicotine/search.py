@@ -232,8 +232,14 @@ class Search:
 
     def do_search(
         self, search_term: str, mode: SearchMode, room: str | None = None, users: list[str] | None = None,
-        switch_page: bool = True
-    ) -> None:
+        switch_page: bool = True, notify_frontend: bool = True
+    ) -> int:
+        """Start a search and return its token.
+
+        `notify_frontend=False` keeps the search invisible to connected UI
+        front ends. The engine API uses it: a native client tracks its own
+        searches, and a GTK tab appearing for them would be noise.
+        """
 
         # Validate search term and run it through plugins
         search_term, room, users = self._process_search_term(search_term, mode, room, users)
@@ -254,8 +260,11 @@ class Search:
             del items[self.SEARCH_HISTORY_LIMIT:]
             config.write_configuration()
 
-        events.emit("add-search", search.token, search, switch_page)
+        if notify_frontend:
+            events.emit("add-search", search.token, search, switch_page)
+
         self.send_search_request(search.token)
+        return search.token
 
     def send_search_request(self, token: int) -> None:
 

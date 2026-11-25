@@ -453,6 +453,13 @@ class UserBrowse:
         elif new_request:
             browsed_user.clear()
 
+        if new_request:
+            # Start the latency clock when the request is made, whether the list
+            # comes from a peer or from our own shares on disk.
+            self._browse_timing[username] = {
+                "started": time.monotonic(), "messages": 0, "folders": 0, "files": 0
+            }
+
         events.emit(
             "user-browse-show-user", username, path=path, new_request=new_request,
             switch_page=switch_page

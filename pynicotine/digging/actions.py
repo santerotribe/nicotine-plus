@@ -9,6 +9,7 @@ from dataclasses import dataclass
 
 from pynicotine.digging.crate import STATUS_KEPT, Crate, CrateTrack
 from pynicotine.digging.settings import DiggingSettings
+from pynicotine.events import events
 
 
 @dataclass
@@ -36,6 +37,7 @@ def record_local_path(track: CrateTrack, path: str,
             entry.local_path = str(path)
 
     crate.save()
+    _notify(track)
 
 
 def crate_for(settings: DiggingSettings | None = None) -> Crate:
@@ -60,6 +62,7 @@ def keep_source(core, source: TrackSource, settings: DiggingSettings | None = No
     ))
     track.status = STATUS_KEPT
     crate.save()
+    _notify(track)
 
     download_folder = settings.work_path / "downloads" / source.username
     download_folder.mkdir(parents=True, exist_ok=True)
@@ -83,3 +86,10 @@ def keep_source(core, source: TrackSource, settings: DiggingSettings | None = No
     )
 
     return track
+
+
+def _notify(track: CrateTrack) -> None:
+
+    from pynicotine.digging.service import track_event_fields
+
+    events.emit("digging-status", track.id, **track_event_fields(track))

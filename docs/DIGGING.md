@@ -52,6 +52,12 @@ python -m pynicotine.digging preview "01 Ruggier - Long Ride (Original Mix).aiff
 Playback uses PortAudio (`sounddevice`) so the app owns the buffer: instant
 seeks, sample-accurate playhead for the waveform, no external player.
 
+A native front end does not use that player. `POST /audition` starts the same
+peer preview and catalogue lookup headlessly and answers `GET /audition/<id>`
+with the file to open right now (`local` → `peer` partial → `catalogue` URL) plus
+the peer's byte horizon, so AVAudioEngine can stream it without the engine ever
+touching audio output. See [ENGINE-API.md](ENGINE-API.md#audition--playback-handoff).
+
 ## First run
 
 Press **Separation…** in the Dig window once and pick one of:

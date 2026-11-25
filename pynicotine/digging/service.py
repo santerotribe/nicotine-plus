@@ -24,7 +24,6 @@ from pynicotine.digging.paths import virtual_basename
 from pynicotine.digging.crate import (
     STATUS_FAILED,
     STATUS_KEPT,
-    STATUS_READY,
     STATUS_SCHEDULED,
     STATUS_SEPARATING,
 )
@@ -132,15 +131,20 @@ class PipelineService:
     def _set_status(self, track_id: str, **fields) -> None:
 
         crate = self._crate()
+        track = None
 
         for entry in crate.tracks:
             if entry.id == track_id:
                 for name, value in fields.items():
                     setattr(entry, name, value)
 
+                track = entry
                 break
 
         crate.save()
+
+        if track is not None:
+            events.emit("digging-status", track.id, **track_event_fields(track))
 
     # -- the work ---------------------------------------------------------
 
@@ -178,6 +182,22 @@ class PipelineService:
         finally:
             with self._lock:
                 self._running.discard(track.id)
+
+
+def track_event_fields(track) -> dict:
+    """The slice of a crate track that changes as the pipeline runs."""
+
+    return {
+        "username": track.username,
+        "filename": track.filename,
+        "virtual_path": track.virtual_path,
+        "status": track.status,
+        "local_path": track.local_path,
+        "bpm": track.bpm,
+        "stems": dict(track.stems),
+        "als_path": track.als_path,
+        "error": track.error,
+    }
 
 
 SERVICE = PipelineService()

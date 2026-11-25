@@ -3,6 +3,7 @@
 
 """Local HTTP API exposing the client engine to a native front end."""
 
-from pynicotine.engineapi.server import maybe_start, start
+from pynicotine.engineapi.hub import event_hub
+from pynicotine.engineapi.server import maybe_start, start, stop
 
-__all__ = ["start", "maybe_start"]
+__all__ = ["event_hub", "maybe_start", "start", "stop"]

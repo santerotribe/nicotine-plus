@@ -12,24 +12,41 @@ Start it from the environment:
     NICOTINE_API_PORT=8766 NICOTINE_API_TOKEN=secret \
         python -m pynicotine -n --config ... --user-data ...
 
-Endpoints (all read-only except the two POSTs):
+Endpoints:
 
-    GET  /health
-    GET  /state
-    GET  /users/<user>/summary
-    GET  /users/<user>/folders?offset=0&limit=200
-    GET  /users/<user>/files?folder=<path>&offset=0&limit=500
-    POST /users/<user>/browse
-    GET  /downloads?offset=0&limit=500
-    GET  /crate
-    POST /crate/<id>/separate
+    GET    /health
+    GET    /state
+    GET    /events                          Server-Sent Events (see hub.py)
+    GET    /users/<user>/summary
+    GET    /users/<user>/folders?offset=0&limit=200
+    GET    /users/<user>/files?folder=<path>&offset=0&limit=500
+    POST   /users/<user>/browse
+    GET    /downloads?offset=0&limit=500
+    GET    /crate
+    POST   /crate/<id>/separate
+    GET    /search                         tracked searches
+    POST   /search                         {"term": "...", "mode": "global"}
+    GET    /search/<token>                 counters
+    GET    /search/<token>/results?offset=0&limit=500
+    GET    /search/<token>/users?offset=0&limit=200
+    GET    /search/<token>/files?user=<u>&folder=<f>&offset=0&limit=500
+    POST   /search/<token>/stop
+    DELETE /search/<token>
+    GET    /audition                       active audition sessions
+    POST   /audition                       start one for a browsed file
+    GET    /audition/<id>                  resolved playback source
+    POST   /audition/<id>/keep             add to the crate
+    DELETE /audition/<id>                  stop and clean up
 """
 
 from __future__ import annotations
 
 import json
 import os
+import queue
+import socket
 import threading
+import time
 import urllib.parse
 
 from http import HTTPStatus
@@ -37,6 +54,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pynicotine
 
+from pynicotine.engineapi.audition import audition_sessions
+from pynicotine.engineapi.hub import event_hub, type_filter
+from pynicotine.engineapi.searchstore import store as search_store
 from pynicotine.engineapi.serialize import (
     crate_track_dict,
     file_dict,
@@ -46,6 +66,9 @@ from pynicotine.engineapi.serialize import (
 DEFAULT_PORT = 8766
 DEFAULT_LIMIT = 200
 MAX_LIMIT = 5000
+MAX_BODY_BYTES = 1024 * 1024
+HEARTBEAT_SECONDS = 15.0
+MAIN_THREAD_TIMEOUT = 8.0
 
 _SERVER: ThreadingHTTPServer | None = None
 _TOKEN = ""
@@ -59,6 +82,8 @@ def _core():
 
 class Handler(BaseHTTPRequestHandler):
     server_version = "NicotineEngine/1.0"
+    protocol_version = "HTTP/1.1"
+    timeout = 60  # idle keep-alive connections must not pin a thread forever
 
     def log_message(self, fmt, *args):  # noqa: A003
         return
@@ -76,11 +101,16 @@ class Handler(BaseHTTPRequestHandler):
     def _error(self, status: int, message: str) -> None:
         self._reply(status, {"error": message})
 
-    def _authorized(self) -> bool:
+    def _authorized(self, query: dict | None = None) -> bool:
         if not _TOKEN:
             return True
 
-        return self.headers.get("Authorization") == f"Bearer {_TOKEN}"
+        if self.headers.get("Authorization") == f"Bearer {_TOKEN}":
+            return True
+
+        # EventSource-style clients cannot set headers; the token may also be
+        # passed in the query string, loopback only.
+        return query is not None and query.get("token") == _TOKEN
 
     def _query(self) -> dict:
         parsed = urllib.parse.urlparse(self.path)
@@ -93,6 +123,130 @@ class Handler(BaseHTTPRequestHandler):
 
         except (TypeError, ValueError):
             return default
+
+    def _body(self) -> dict:
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+
+        except (TypeError, ValueError):
+            length = 0
+
+        if length <= 0:
+            return {}
+
+        if length > MAX_BODY_BYTES:
+            raise ValueError("request body too large")
+
+        raw = self.rfile.read(length)
+
+        try:
+            payload = json.loads(raw.decode("utf-8"))
+
+        except ValueError as error:
+            raise ValueError(f"invalid JSON body: {error}") from error
+
+        if not isinstance(payload, dict):
+            raise ValueError("expected a JSON object")
+
+        return payload
+
+    @staticmethod
+    def _invoke(callback, timeout: float = MAIN_THREAD_TIMEOUT):
+        """Run a callback on the engine thread and return its value.
+
+        Engine mutations must happen where the rest of the engine runs; HTTP
+        handlers are separate threads. If we already are on the engine thread
+        (tests), call directly.
+        """
+
+        if threading.current_thread() is threading.main_thread():
+            return callback()
+
+        from pynicotine.events import events
+
+        done = threading.Event()
+        box: dict = {}
+
+        def runner() -> None:
+
+            try:
+                box["value"] = callback()
+
+            except BaseException as error:  # noqa: BLE001 - re-raised below
+                box["error"] = error
+
+            finally:
+                done.set()
+
+        events.invoke_main_thread(runner)
+
+        if not done.wait(timeout):
+            raise TimeoutError("the engine did not answer in time")
+
+        error = box.get("error")
+
+        if error is not None:
+            raise error
+
+        return box.get("value")
+
+    def _sse_write(self, payload: dict) -> None:
+
+        data = json.dumps(payload, default=str)
+        seq = payload.get("seq")
+        prefix = f"id: {seq}\n" if seq else ""
+        self.wfile.write(f"{prefix}event: {payload.get('type', 'message')}\ndata: {data}\n\n".encode())
+        self.wfile.flush()
+
+    def _stream_events(self, query: dict) -> None:
+        """Hold the connection open and write events until the client leaves."""
+
+        subscriber = event_hub().subscribe(*type_filter(query.get("types", "")))
+
+        try:
+            self.connection.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+
+        except OSError:
+            pass
+
+        # Server-Sent Events are an endless response: HTTP/1.0 semantics with a
+        # connection close is what every EventSource implementation expects.
+        self.protocol_version = "HTTP/1.0"
+        self.close_connection = True
+
+        try:
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-cache, no-transform")
+            self.send_header("Connection", "close")
+            self.send_header("X-Accel-Buffering", "no")
+            self.end_headers()
+
+            hello = {"type": "hello", "seq": 0, "time": int(time.time())}
+            hello.update(event_hub().snapshot())
+            self._sse_write(hello)
+
+            while True:
+                try:
+                    payload = subscriber.queue.get(timeout=HEARTBEAT_SECONDS)
+
+                except queue.Empty:
+                    self.wfile.write(b": ping\n\n")
+                    self.wfile.flush()
+                    continue
+
+                dropped = subscriber.take_dropped()
+
+                if dropped:
+                    self._sse_write({"type": "gap", "dropped": dropped})
+
+                self._sse_write(payload)
+
+        except OSError:
+            pass
+
+        finally:
+            event_hub().unsubscribe(subscriber)
 
     # -- routing -----------------------------------------------------------
 
@@ -110,8 +264,13 @@ class Handler(BaseHTTPRequestHandler):
                 "username": core.users.login_username,
             })
 
-        if not self._authorized():
+        query = self._query()
+
+        if not self._authorized(query):
             return self._error(HTTPStatus.UNAUTHORIZED, "bad or missing token")
+
+        if parts == ["events"]:
+            return self._stream_events(query)
 
         try:
             return self._route_get(parts)
@@ -119,7 +278,7 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as error:  # noqa: BLE001 - never leak a stack trace
             return self._error(HTTPStatus.INTERNAL_SERVER_ERROR, str(error))
 
-    def _route_get(self, parts: list[str]) -> None:
+    def _route_get(self, parts: list[str]) -> None:  # pylint: disable=too-many-return-statements
 
         core = _core()
         query = self._query()
@@ -133,6 +292,9 @@ class Handler(BaseHTTPRequestHandler):
                 "privileges_seconds": core.users.privileges_left,
                 "downloads": len(core.downloads.transfers),
                 "browsed_users": list(userbrowse.users),
+                "searches": len(search_store().summaries()),
+                "auditions": len(audition_sessions().summaries()),
+                "event_subscribers": event_hub().subscriber_count,
             })
 
         if len(parts) == 3 and parts[0] == "users" and parts[2] == "summary":
@@ -188,10 +350,83 @@ class Handler(BaseHTTPRequestHandler):
                 "tracks": [crate_track_dict(track) for track in tracks],
             })
 
+        if parts == ["search"]:
+            summaries = search_store().summaries()
+
+            return self._reply(HTTPStatus.OK, {"total": len(summaries), "searches": summaries})
+
+        if len(parts) >= 2 and parts[0] == "search":
+            return self._route_search_get(parts, query)
+
+        if parts == ["audition"]:
+            summaries = audition_sessions().summaries()
+
+            return self._reply(HTTPStatus.OK, {"total": len(summaries), "auditions": summaries})
+
+        if len(parts) == 2 and parts[0] == "audition":
+            session = audition_sessions().get(parts[1])
+
+            if session is None:
+                return self._error(HTTPStatus.NOT_FOUND, "unknown audition")
+
+            return self._reply(HTTPStatus.OK, session.state())
+
+        return self._error(HTTPStatus.NOT_FOUND, "unknown endpoint")
+
+    def _route_search_get(self, parts: list[str], query: dict) -> None:
+
+        try:
+            token = int(parts[1])
+
+        except (TypeError, ValueError):
+            return self._error(HTTPStatus.BAD_REQUEST, "invalid search token")
+
+        store = search_store()
+        offset = self._int(query, "offset", 0)
+        limit = self._int(query, "limit", 500)
+
+        if len(parts) == 2:
+            entry = store.get(token)
+
+            if entry is None:
+                return self._error(HTTPStatus.NOT_FOUND, "unknown search")
+
+            return self._reply(HTTPStatus.OK, entry.summary())
+
+        if parts[2] == "results":
+            page = store.results_page(token, offset, limit)
+
+            if page is None:
+                return self._error(HTTPStatus.NOT_FOUND, "unknown search")
+
+            return self._reply(HTTPStatus.OK, page)
+
+        if parts[2] == "users":
+            page = store.users_page(token, offset, limit)
+
+            if page is None:
+                return self._error(HTTPStatus.NOT_FOUND, "unknown search")
+
+            return self._reply(HTTPStatus.OK, page)
+
+        if parts[2] == "files":
+            username = query.get("user", "")
+
+            if not username:
+                return self._error(HTTPStatus.BAD_REQUEST, "user is required")
+
+            folder = query.get("folder")
+            page = store.files_page(token, username, folder, offset, limit)
+
+            if page is None:
+                return self._error(HTTPStatus.NOT_FOUND, "unknown search")
+
+            return self._reply(HTTPStatus.OK, page)
+
         return self._error(HTTPStatus.NOT_FOUND, "unknown endpoint")
 
     def do_POST(self) -> None:  # noqa: N802
-        if not self._authorized():
+        if not self._authorized(self._query()):
             return self._error(HTTPStatus.UNAUTHORIZED, "bad or missing token")
 
         parsed = urllib.parse.urlparse(self.path)
@@ -200,8 +435,56 @@ class Handler(BaseHTTPRequestHandler):
         try:
             return self._route_post(parts)
 
+        except ValueError as error:
+            return self._error(HTTPStatus.BAD_REQUEST, str(error))
+
         except Exception as error:  # noqa: BLE001
             return self._error(HTTPStatus.INTERNAL_SERVER_ERROR, str(error))
+
+    def do_DELETE(self) -> None:  # noqa: N802
+        if not self._authorized(self._query()):
+            return self._error(HTTPStatus.UNAUTHORIZED, "bad or missing token")
+
+        parsed = urllib.parse.urlparse(self.path)
+        parts = [part for part in parsed.path.split("/") if part]
+
+        try:
+            return self._route_delete(parts)
+
+        except ValueError as error:
+            return self._error(HTTPStatus.BAD_REQUEST, str(error))
+
+        except Exception as error:  # noqa: BLE001
+            return self._error(HTTPStatus.INTERNAL_SERVER_ERROR, str(error))
+
+    def _route_delete(self, parts: list[str]) -> None:
+
+        from pynicotine.core import core
+
+        if len(parts) == 2 and parts[0] == "search":
+            try:
+                token = int(parts[1])
+
+            except (TypeError, ValueError):
+                return self._error(HTTPStatus.BAD_REQUEST, "invalid search token")
+
+            if search_store().get(token) is None:
+                return self._error(HTTPStatus.NOT_FOUND, "unknown search")
+
+            self._invoke(lambda: core.search.remove_search(token))
+            search_store().remove(token)
+            return self._reply(HTTPStatus.OK, {"stopped": token})
+
+        if len(parts) == 2 and parts[0] == "audition":
+            session = audition_sessions().get(parts[1])
+
+            if session is None:
+                return self._error(HTTPStatus.NOT_FOUND, "unknown audition")
+
+            self._invoke(lambda: audition_sessions().close(session.id))
+            return self._reply(HTTPStatus.OK, {"closed": session.id})
+
+        return self._error(HTTPStatus.NOT_FOUND, "unknown endpoint")
 
     def _route_post(self, parts: list[str]) -> None:
 
@@ -218,6 +501,35 @@ class Handler(BaseHTTPRequestHandler):
             )
             return self._reply(HTTPStatus.ACCEPTED, {"requested": username})
 
+        if parts == ["search"]:
+            return self._create_search()
+
+        if len(parts) == 3 and parts[0] == "search" and parts[2] == "stop":
+            try:
+                token = int(parts[1])
+
+            except (TypeError, ValueError):
+                return self._error(HTTPStatus.BAD_REQUEST, "invalid search token")
+
+            if search_store().get(token) is None:
+                return self._error(HTTPStatus.NOT_FOUND, "unknown search")
+
+            self._invoke(lambda: core.search.remove_search(token))
+            search_store().remove(token)
+            return self._reply(HTTPStatus.OK, {"stopped": token})
+
+        if parts == ["audition"]:
+            return self._create_audition()
+
+        if len(parts) == 3 and parts[0] == "audition" and parts[2] == "keep":
+            session = audition_sessions().get(parts[1])
+
+            if session is None:
+                return self._error(HTTPStatus.NOT_FOUND, "unknown audition")
+
+            track = self._invoke(session.keep)
+            return self._reply(HTTPStatus.ACCEPTED, {"track": track, "audition": session.summary()})
+
         if len(parts) == 3 and parts[0] == "crate" and parts[2] == "separate":
             from pynicotine.digging.actions import crate_for
             from pynicotine.digging.service import start_service
@@ -233,6 +545,143 @@ class Handler(BaseHTTPRequestHandler):
 
         return self._error(HTTPStatus.NOT_FOUND, "unknown endpoint")
 
+    # -- action endpoints --------------------------------------------------
+
+    def _create_search(self) -> None:
+
+        from pynicotine.core import core
+        from pynicotine.search import SearchMode
+        from pynicotine.slskmessages import UserStatus
+
+        payload = self._body()
+        term = str(payload.get("term") or "").strip()
+
+        if not term:
+            return self._error(HTTPStatus.BAD_REQUEST, "term is required")
+
+        raw_mode = str(payload.get("mode") or SearchMode.GLOBAL).lower()
+
+        try:
+            mode = SearchMode(raw_mode)
+
+        except ValueError:
+            return self._error(HTTPStatus.BAD_REQUEST, f"unknown search mode: {raw_mode}")
+
+        if mode == SearchMode.WISHLIST:
+            return self._error(HTTPStatus.BAD_REQUEST, "wishlist searches are not supported here")
+
+        room = payload.get("room") or None
+        users = payload.get("users") or None
+
+        if users is not None and not isinstance(users, list):
+            return self._error(HTTPStatus.BAD_REQUEST, "users must be a list")
+
+        if mode == SearchMode.USER and not users:
+            return self._error(HTTPStatus.BAD_REQUEST, "users is required for user searches")
+
+        if mode == SearchMode.ROOMS and not room:
+            return self._error(HTTPStatus.BAD_REQUEST, "room is required for room searches")
+
+        if core.users.login_status == UserStatus.OFFLINE:
+            return self._error(HTTPStatus.CONFLICT, "not logged in")
+
+        def start_search() -> dict:
+
+            token = core.search.do_search(
+                term, mode, room=room, users=users, switch_page=False, notify_frontend=False)
+            search = core.search.searches.get(token)
+
+            if search is None:
+                raise RuntimeError("search was not registered")
+
+            # Registered on the engine thread, before any result can arrive, so
+            # the first peer response is never lost.
+            return search_store().create(
+                token, search.term, str(search.mode), search.included_words, search.excluded_words).summary()
+
+        summary = self._invoke(start_search)
+        event_hub().publish("search_started", token=summary["token"], term=summary["term"], mode=summary["mode"])
+        return self._reply(HTTPStatus.CREATED, summary)
+
+    def _create_audition(self) -> None:
+
+        from pynicotine.core import core
+
+        payload = self._body()
+        username = str(payload.get("username") or "").strip()
+        virtual_path = str(payload.get("virtual_path") or "").strip()
+
+        if not username or not virtual_path:
+            return self._error(HTTPStatus.BAD_REQUEST, "username and virtual_path are required")
+
+        folder, _separator, basename = virtual_path.rpartition("\\")
+        filename = str(payload.get("filename") or basename or virtual_path)
+        size = int(payload.get("size") or 0)
+        attributes = _attributes(payload)
+        duration = float(payload.get("duration") or getattr(attributes, "length", 0) or 0.0)
+
+        def start_session() -> object:
+
+            local_path = ""
+
+            if username == core.users.login_username:
+                # Our own shares are already on disk: audition the real file.
+                try:
+                    local_folder = core.shares.virtual2real(folder)
+                    candidate = os.path.join(local_folder, filename)
+
+                    if os.path.isfile(candidate):
+                        local_path = candidate
+
+                except Exception:  # noqa: BLE001 - fall back to catalogue/peer
+                    local_path = ""
+
+            return audition_sessions().start(
+                username=username,
+                virtual_path=virtual_path,
+                filename=filename,
+                size=size,
+                attributes=attributes,
+                duration_hint=duration,
+                local_path=local_path,
+            )
+
+        session = self._invoke(start_session)
+        return self._reply(HTTPStatus.CREATED, session.state())
+
+
+def _attributes(payload: dict):
+    """Build the file attribute object the transfer layer expects."""
+
+    from pynicotine.slskmessages import FileAttributes
+
+    fields = payload.get("attributes") or {}
+
+    def pick(name: str) -> int | None:
+
+        value = fields.get(name, payload.get(name))
+
+        if value is None:
+            return None
+
+        try:
+            return int(value)
+
+        except (TypeError, ValueError):
+            return None
+
+    try:
+        return FileAttributes(
+            bitrate=pick("bitrate"),
+            length=pick("length"),
+            vbr=pick("vbr"),
+            sample_rate=pick("sample_rate"),
+            bit_depth=pick("bit_depth"),
+        )
+
+    except TypeError:
+        return None
+
 
 def start(port: int = DEFAULT_PORT, token: str = "", host: str = "127.0.0.1") -> ThreadingHTTPServer:
     """Start the API server in a daemon thread. Loopback only by default."""
@@ -247,6 +696,11 @@ def start(port: int = DEFAULT_PORT, token: str = "", host: str = "127.0.0.1") ->
     _SERVER = server
     thread = threading.Thread(target=server.serve_forever, name="engine-api", daemon=True)
     thread.start()
+
+    # Push channel and engine-side search results only cost anything once the
+    # API is actually enabled.
+    event_hub().start()
+    search_store().start()
 
     from pynicotine.logfacility import log
 
