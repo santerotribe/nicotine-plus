@@ -132,23 +132,15 @@ class DigPlayer:
         _append(self.drag_handle, handle_icon)
         _append(self.drag_handle, handle_label)
 
-        drag_source = Gtk.DragSource(actions=Gdk.DragAction.COPY)
-        drag_source.connect("prepare", self._on_drag_prepare)
-        drag_source.connect("drag-begin", self._on_drag_begin)
-        drag_source.connect("drag-end", self._on_drag_end)
-        self.drag_handle.add_controller(drag_source)
-        self.drag_source = drag_source
+        drag_click = Gtk.GestureClick()
+        drag_click.connect("pressed", self._on_native_drag_clicked)
+        self.drag_handle.add_controller(drag_click)
 
         self.hint_label = Gtk.Label(
-            label="click or drag to scrub · ⌘drag / drag handle to export", xalign=0, visible=True)
+            label="click or drag to scrub · ⌘click or the handle to drag into Ableton", xalign=0, visible=True)
         self.hint_label.add_css_class("dim-label")
 
         # Cmd-drag anywhere on the waveform also exports the file
-        self.waveform_drag_source = Gtk.DragSource(actions=Gdk.DragAction.COPY)
-        self.waveform_drag_source.connect("prepare", self._on_drag_prepare)
-        self.waveform_drag_source.connect("drag-begin", self._on_drag_begin)
-        self.waveform_drag_source.connect("drag-end", self._on_drag_end)
-
         key_controller = Gtk.EventControllerKey()
         key_controller.connect("key-pressed", self._on_key_pressed)
         key_controller.connect("key-released", self._on_key_released)
@@ -957,6 +949,28 @@ class DigPlayer:
         self._cache().enforce()
         return written
 
+    def _native_drag(self) -> None:
+        """Hand the export to the AppKit helper, which drags as a real file URL."""
+
+        path = self.export_audio()
+
+        if path is None:
+            self._set_status("nothing decoded yet — wait for audio", sticky_seconds=6)
+            return
+
+        from pynicotine.digging.draghelper import start_drag
+
+        started, reason = start_drag(path)
+
+        if started:
+            self._set_status("chip ready — drag it into Ableton", sticky_seconds=8)
+
+        else:
+            self._set_status(f"native drag unavailable: {reason}", sticky_seconds=8)
+
+    def _on_native_drag_clicked(self, *_args) -> None:
+        self._native_drag()
+
     def _on_drag_prepare(self, _source, _x, _y):
 
         from pynicotine.logfacility import log
@@ -1010,25 +1024,9 @@ class DigPlayer:
             self._copy_for_live()
             return True
 
-        controllers = list(self.waveform.observe_controllers())
-
-        if keyval in self.META_KEYS and self.waveform_drag_source not in controllers:
-            self.waveform.add_controller(self.waveform_drag_source)
-            self.waveform.set_cursor_from_name("grab")
-            self._set_status("Cmd-drag the waveform to export it", sticky_seconds=3)
-
         return False
 
-    def _on_key_released(self, _controller, keyval, _keycode, _state) -> bool:
-
-        if keyval in self.META_KEYS:
-            controllers = list(self.waveform.observe_controllers())
-
-            if self.waveform_drag_source in controllers:
-                self.waveform.remove_controller(self.waveform_drag_source)
-
-            self.waveform.set_cursor_from_name("pointer")
-
+    def _on_key_released(self, _controller, _keyval, _keycode, _state) -> bool:
         return False
 
     def _on_drag_begin(self, *_args) -> None:
@@ -1137,7 +1135,14 @@ class DigPlayer:
         width = max(1, self.waveform.get_width())
         return max(0.0, min(1.0, x / width))
 
-    def _on_waveform_click(self, _gesture, _n_press, x, _y) -> None:
+    def _on_waveform_click(self, gesture, _n_press, x, _y) -> None:
+
+        state = gesture.get_current_event_state()
+
+        if state & (Gdk.ModifierType.META_MASK | Gdk.ModifierType.SUPER_MASK):
+            self._native_drag()
+            return
+
         self._seek_fraction(self._fraction_at(x))
 
     def _on_waveform_drag_begin(self, _gesture, start_x, _start_y) -> None:
