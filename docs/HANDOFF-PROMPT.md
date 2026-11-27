@@ -1,69 +1,93 @@
 # Handoff prompt (paste into a fresh session)
 
-You are continuing work on a fork of Nicotine+ that has been extended into a
-crate-digging tool for sampling (browse Soulseek → audition → keep → separate
-stems → Ableton Live). The long-term plan is a native SwiftUI client on macOS
-that talks to this Python engine over a local HTTP API.
+You are continuing a fork of Nicotine+ that has become a crate-digging tool for
+sampling: browse Soulseek → audition → keep → separate stems → Ableton Live.
+The Python engine is mature and exposes a local API; **`native/DigApp`** is a
+SwiftUI client that is now the daily front end. GTK still exists and still owns
+the only separation-setup UI.
 
-Start by reading, in this order:
-- docs/HANDOFF.md      (state, architecture, known issues, operational notes)
-- docs/ENGINE-API.md   (API contract, event stream, worked curl session)
-- docs/UI-DIRECTION.md (the design brief for the native client)
-- docs/DIGGING.md      (feature overview)
+Read, in this order:
+- docs/HANDOFF.md — **§0 state, §4 what works, §5 blockers, §8 next steps**
+- docs/ENGINE-API.md — endpoints, SSE contract (chunked; one data line = one event)
+- docs/UI-DIRECTION.md — tokens, materials, the two palettes
+- docs/DIGGING.md — feature overview (older, still useful for the pipeline)
 
 Repo: /Volumes/Schema Era/Schema Apps/nicotine
-Branch: main-ours (44 commits ahead of origin/master; do not touch master)
+Branch: main-ours (50+ commits ahead of origin/master; never touch master)
+Fork: santerotribe/nicotine-plus (default branch main-ours; push main-ours and
+native-client-v1 there — `origin` is upstream and read-only)
 
-Environment (already set up):
-- .venv created with --system-site-packages (Python 3.14.7, GTK 4.24.2,
-  PyGObject, PyObjC, sounddevice, yt-dlp)
-- Dev profile: --config "$PWD/.dev/config" --user-data "$PWD/.dev/data"
-- Tests: XDG_CONFIG_HOME=/tmp/digcfg .venv/bin/python -m pytest pynicotine/tests -q
-  (baseline: 165 passed, 1 skipped)
-- Never print the contents of .dev/config (it contains the Soulseek password).
+Environment:
+- .venv created with --system-site-packages (Python 3.14.7, GTK 4.24.2, PyGObject)
+- Native: `native/DigApp/run.sh` (spawns the engine if 8766 is free)
+- Tests: `XDG_CONFIG_HOME=/tmp/digcfg .venv/bin/python -m pytest pynicotine/tests -q`
+  (165 passed, 1 skipped) and
+  `(cd native/DigApp && swift test --disable-sandbox --scratch-path /tmp/digapp-build --cache-path /tmp/digapp-cache)`
+  (7 passed)
+- Never print .dev/config (it contains the Soulseek password).
 
-Already done (do not redo):
-- GET /events (SSE), /search with engine-side paging, /audition playback handoff.
-  See docs/ENGINE-API.md; 40 tests live in pynicotine/tests/unit/engineapi.
+Where we are: browse, live search (50,000+ results), audition with AVAudioEngine,
+Keep, drag-out, reconnect and an engine watchdog all work. **The chain stops at
+separation**: .dev/digging.json is {} — renderer is mvsep with no token, Demucs
+is not installed, the studio-PC URL is empty — so Keep downloads and then fails.
+The native app's "Digging" tab is a placeholder, so there is no way to configure
+a renderer from it.
 
 Your tasks, in priority order:
 
-1. Transfer controls + settings API: pause/resume/cancel/clear on
-   /downloads/<user>/<path>, and read/write of the digging config
-   (renderer, cache budget, export folder) behind /settings.
+1. **Settings API + Digging screen — the blocker.**
+   - Engine: `GET /settings` returning raw DiggingSettings plus `renderer_available`
+     messages for mvsep / pc / local and preview-cache usage; `PATCH /settings`
+     accepting a validated subset (renderer, mvsep_token, mvsep_sep_type, preset,
+     pc_url, pc_token, export_dir, preview_cache_mb, observatory_root, live_app,
+     warp defaults), dispatched on the engine thread. Tests for validation.
+   - App: replace the Digging placeholder with three cards — Separation (renderer
+     picker, credentials, a Test key printing readiness), Output & Live (folders,
+     warp mode), Cache (budget, usage, Clear).
+   - Done when a fake renderer shows its real error, a token flips readiness, and
+     values survive a relaunch.
 
-2. The SwiftUI spike, following docs/UI-DIRECTION.md exactly: a window with the
-   rail → list → detail skeleton, paged browse over the API, a persistent 48 pt
-   instrument transport playing from /audition with AVAudioEngine, and an AppKit
-   NSDraggingSession for files. Launch the Python engine as a child process and
-   wait for /health before showing content. Evaluate before committing to the
-   full native shell.
+2. **First real pipeline run** once a token exists: Keep a track and watch
+   `kept → separating → ready`, stem lanes populate, "Open in Live" opens a
+   warped set in Live 12. Ask the user for the MVSEP token; do not echo it back
+   into chat or logs.
+
+3. **Crate management**: `DELETE /crate/<id>` + a row action; remove the stale
+   `winter2014` entry (kept, no local path).
+
+4. **Transfer controls**, then polish: peer-partial reload, focus rings that do
+   not depend on macOS keyboard navigation, orphan-engine cleanup on SIGTERM,
+   saved searches, an export endpoint so drag carries a WAV instead of the source
+   file, chip drag fallback removal, GTK3 audit, i18n.
 
 Rules of engagement:
-- Use anchored edits on large files (an earlier whole-file write truncated
-  pynicotine/userbrowse.py); verify line counts and grep for key symbols after
-  editing.
 - events.emit() quits the client when a listener raises. Any new engine listener
-  added for the API must be wrapped in engineapi.hub.guard() and accept loose
-  arguments (abort-download passes three, update-download passes two).
-- Do not import `log` inside a function in gtkgui/application.py — it shadows the
-  module-level logger and breaks startup.
-- Do not re-introduce Gtk.DragSource file drags; macOS drag is handled by an
-  invisible AppKit child window (pynicotine/digging/nativedrag.py).
-- Free port 2234 before restarting the app, and check 8766 too:
-  lsof -nP -iTCP:2234 -sTCP:LISTEN -t | xargs kill
-  lsof -nP -iTCP:8766 -sTCP:LISTEN -t | xargs kill
-- If the app starts but nothing connects, run with --ci-mode to get a traceback
-  instead of the critical-error dialog.
-- Keep the Python engine front-end agnostic: no UI assumptions in pynicotine/*.
-- The native client follows arcaNative's design system. Port its *values*, never
-  its source: this repo is GPL-3.0-or-later, arcaNative is a separate product.
-- Run the test suite before each commit; commit on main-ours with a focused message.
+  used by the API must go through `engineapi.hub.guard()` and accept loose
+  arguments (abort-download passes three, update-download two).
+- Use anchored edits on large files; a whole-file write once truncated
+  pynicotine/userbrowse.py.
+- Do not import `log` inside a function in gtkgui/application.py (it shadows the
+  module logger and breaks startup).
+- Do not re-introduce Gtk.DragSource file drags; macOS drag is AppKit
+  (pynicotine/digging/nativedrag.py for GTK, Drag/DragOutHandle.swift for native).
+- Free the ports before restarting: kill PIDs from lsof on 2234 and 8766. If the
+  app starts but nothing connects, use `--ci-mode` for a traceback.
+- SwiftPM needs `--disable-sandbox` and `/tmp/digapp-build` here; the SSD path
+  breaks the compiler cache.
+- Fonts are `Manrope-*` and `IBMPlexMono-Regular`/`-Medium` by Core Text name;
+  the family name silently falls back to SF Mono.
+- One Soulseek account only: another client on `santero` kicks this engine
+  ("account in use elsewhere"). Use `POST /login` (or the Reconnect key) after
+  closing it.
+- Keep the engine front-end agnostic: no UI assumptions under pynicotine/*.
+- Run both test suites, commit on main-ours with a focused message, and push
+  main-ours + native-client-v1 to fork.
 
 Definition of done for this session:
-- the new endpoints implemented, documented in docs/ENGINE-API.md and covered by
-  tests, with curl examples verified against a running instance;
-- the spike builds and runs against the live engine, showing a real browse list,
-  real audio through AVAudioEngine, and a real drag into Ableton;
-- test suite green and the app restarted cleanly;
-- a short report of what changed, what was verified live, and what remains.
+- /settings implemented, documented in docs/ENGINE-API.md, tested, and exercised
+  with curl against a running engine;
+- the Digging screen drives it, with readiness visible and values persisting;
+- one Keep → separate → Live run completed (or the exact remaining blocker
+  reported);
+- both suites green, app relaunched cleanly, and a short report of what changed,
+  what was verified live, and what remains.
