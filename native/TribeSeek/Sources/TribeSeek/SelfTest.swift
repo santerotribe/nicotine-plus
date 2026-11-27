@@ -5,7 +5,7 @@ import Foundation
 
 /// A headless check of the client against a live engine.
 ///
-/// `DIG_SELFTEST=1` runs it before the UI starts and exits with 0 on success,
+/// `TRIBE_SELFTEST=1` runs it before the UI starts and exits with 0 on success,
 /// so the spike can be verified without clicking anything.
 enum SelfTest {
 

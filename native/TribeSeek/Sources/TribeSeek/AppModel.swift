@@ -85,7 +85,7 @@ final class AppModel {
 
         startEvents(client)
 
-        if let target = ProcessInfo.processInfo.environment["DIG_OPEN"], !target.isEmpty {
+        if let target = ProcessInfo.processInfo.environment["TRIBE_OPEN"], !target.isEmpty {
             await browse(user: target)
         } else if let first = browse.users.first, browse.selectedUser == nil {
             await browse.select(user: first)
@@ -93,7 +93,7 @@ final class AppModel {
 
         // A development aid: run a search on launch, so the results list can be
         // checked without typing.
-        if let term = ProcessInfo.processInfo.environment["DIG_SEARCH"], !term.isEmpty {
+        if let term = ProcessInfo.processInfo.environment["TRIBE_SEARCH"], !term.isEmpty {
             section = .search
             search.term = term
             await search.run()
@@ -101,7 +101,7 @@ final class AppModel {
 
         // A development aid: audition the first file so the transport and
         // waveform can be checked without clicking.
-        if ProcessInfo.processInfo.environment["DIG_AUTO"] == "1",
+        if ProcessInfo.processInfo.environment["TRIBE_AUTO"] == "1",
            let folder = browse.selectedFolder,
            let file = browse.files.first,
            let user = browse.selectedUser {
@@ -169,7 +169,7 @@ final class AppModel {
                         await self?.handle(event)
                     }
                 } catch {
-                    NSLog("DigApp: event stream ended: %@", error.localizedDescription)
+                    NSLog("TribeSeek: event stream ended: %@", error.localizedDescription)
                 }
 
                 try? await Task.sleep(nanoseconds: 1_500_000_000)
@@ -240,7 +240,7 @@ final class AppModel {
 
         case "audition":
             guard let snapshot = event.decode(AuditionState.self) else {
-                NSLog("DigApp: audition event did not decode")
+                NSLog("TribeSeek: audition event did not decode")
                 return
             }
 

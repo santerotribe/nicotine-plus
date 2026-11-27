@@ -5,20 +5,20 @@
 import PackageDescription
 
 let package = Package(
-    name: "DigApp",
+    name: "TribeSeek",
     platforms: [.macOS("14.0")],
     products: [
-        .executable(name: "DigApp", targets: ["DigApp"])
+        .executable(name: "TribeSeek", targets: ["TribeSeek"])
     ],
     targets: [
         .executableTarget(
-            name: "DigApp",
+            name: "TribeSeek",
             resources: [.copy("Resources/Fonts")],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .testTarget(
-            name: "DigAppTests",
-            dependencies: ["DigApp"],
+            name: "TribeSeekTests",
+            dependencies: ["TribeSeek"],
             swiftSettings: [.swiftLanguageMode(.v5)]
         )
     ]

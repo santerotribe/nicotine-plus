@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import XCTest
-@testable import DigApp
+@testable import TribeSeek
 
-final class DigAppTests: XCTestCase {
+final class TribeSeekTests: XCTestCase {
 
     func testVirtualPathUsesOneBackslash() {
         XCTAssertEqual(VirtualPath.join(folder: "House\\Deep", name: "a.mp3"), "House\\Deep\\a.mp3")

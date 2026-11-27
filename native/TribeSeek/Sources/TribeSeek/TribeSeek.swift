@@ -5,18 +5,18 @@ import AppKit
 import SwiftUI
 
 @main
-struct DigApp: App {
+struct TribeSeek: App {
 
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @State private var model = AppModel()
 
     var body: some Scene {
-        WindowGroup("Digging") {
+        WindowGroup("Tribe Seek") {
             AppShell(model: model)
                 .frame(minWidth: 1_180, minHeight: 740)
                 .background(Theme.bgCanvas)
                 .task {
-                    if ProcessInfo.processInfo.environment["DIG_SELFTEST"] == "1" {
+                    if ProcessInfo.processInfo.environment["TRIBE_SELFTEST"] == "1" {
                         let passed = await SelfTest.run()
                         exit(passed ? 0 : 1)
                     }

@@ -13,10 +13,10 @@ enum Skin: String {
     case arca
     case suno
 
-    /// Suno's palette is the default; `DIG_SKIN=arca` brings back the graphite
+    /// Suno's palette is the default; `TRIBE_SKIN=arca` brings back the graphite
     /// and lemon gold the client shipped with.
     static let active: Skin = {
-        let raw = ProcessInfo.processInfo.environment["DIG_SKIN"] ?? ""
+        let raw = ProcessInfo.processInfo.environment["TRIBE_SKIN"] ?? ""
         return Skin(rawValue: raw) ?? .suno
     }()
 }

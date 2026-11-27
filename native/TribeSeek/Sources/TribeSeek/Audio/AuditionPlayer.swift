@@ -202,7 +202,7 @@ final class AuditionPlayer {
                 throw PlayerError.downloadFailed
             }
 
-            let folder = FileManager.default.temporaryDirectory.appendingPathComponent("DigApp-audio")
+            let folder = FileManager.default.temporaryDirectory.appendingPathComponent("TribeSeek-audio")
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
 
             let destination = folder.appendingPathComponent(UUID().uuidString)

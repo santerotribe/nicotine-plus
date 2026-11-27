@@ -56,7 +56,7 @@ final class EngineSupervisor {
                 baseURL: baseURL,
                 token: environment["NICOTINE_API_TOKEN"] ?? "devtoken",
                 repoRoot: repo,
-                launchIfMissing: environment["DIG_NO_LAUNCH"] != "1",
+                launchIfMissing: environment["TRIBE_NO_LAUNCH"] != "1",
                 profileConfig: repo?.appendingPathComponent(".dev/config"),
                 profileData: repo?.appendingPathComponent(".dev/data")
             )
@@ -88,7 +88,7 @@ final class EngineSupervisor {
         else {
             phase = .failed("No engine on \(config.baseURL.absoluteString). Start it with: NICOTINE_API_PORT=8766 NICOTINE_API_TOKEN=devtoken .venv/bin/python -m pynicotine -n --config .dev/config --user-data .dev/data")
             message = "Engine not running"
-            NSLog("DigApp: no engine and no launch path (repo=%{public}@)",
+            NSLog("TribeSeek: no engine and no launch path (repo=%{public}@)",
                   config.repoRoot?.path ?? "nil")
             return
         }
@@ -115,7 +115,7 @@ final class EngineSupervisor {
         child.environment = environment
 
         let logURL = Self.logURL()
-        NSLog("DigApp: engine log at \(logURL.path)")
+        NSLog("TribeSeek: engine log at \(logURL.path)")
 
         if !FileManager.default.fileExists(atPath: logURL.path) {
             FileManager.default.createFile(atPath: logURL.path, contents: nil)
@@ -230,13 +230,13 @@ final class EngineSupervisor {
     private static func logURL() -> URL {
 
         let library = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Logs/DigApp-engine.log")
+            .appendingPathComponent("Library/Logs/TribeSeek-engine.log")
 
         if FileManager.default.isWritableFile(atPath: library.deletingLastPathComponent().path) {
             return library
         }
 
-        return FileManager.default.temporaryDirectory.appendingPathComponent("DigApp-engine.log")
+        return FileManager.default.temporaryDirectory.appendingPathComponent("TribeSeek-engine.log")
     }
 
     private func pythonExecutable(in repo: URL) -> URL? {

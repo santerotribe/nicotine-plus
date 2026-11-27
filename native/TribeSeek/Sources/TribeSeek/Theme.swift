@@ -156,7 +156,7 @@ enum Theme {
               let files = try? FileManager.default.contentsOfDirectory(
                 at: folder, includingPropertiesForKeys: nil)
         else {
-            NSLog("DigApp: font folder missing, falling back to system fonts")
+            NSLog("TribeSeek: font folder missing, falling back to system fonts")
             return
         }
 

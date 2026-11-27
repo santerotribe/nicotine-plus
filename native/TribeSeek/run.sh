@@ -11,13 +11,13 @@ cd "$(dirname "$0")"
 
 # The app starts the engine from the checkout when nothing answers on 8766.
 export NICOTINE_REPO="${NICOTINE_REPO:-$(cd ../.. && pwd)}"
-SCRATCH="${DIGAPP_SCRATCH:-/tmp/digapp-build}"
-CACHE="${DIGAPP_CACHE:-/tmp/digapp-cache}"
+SCRATCH="${TRIBE_SCRATCH:-/tmp/tribeseek-build}"
+CACHE="${TRIBE_CACHE:-/tmp/tribeseek-cache}"
 
 swift build --disable-sandbox --scratch-path "$SCRATCH" --cache-path "$CACHE"
 
-if [[ "${DIG_SELFTEST:-0}" == "1" ]]; then
-  exec "$SCRATCH/debug/DigApp"
+if [[ "${TRIBE_SELFTEST:-0}" == "1" ]]; then
+  exec "$SCRATCH/debug/TribeSeek"
 fi
 
-exec "$SCRATCH/debug/DigApp" "$@"
+exec "$SCRATCH/debug/TribeSeek" "$@"

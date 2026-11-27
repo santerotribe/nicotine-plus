@@ -269,7 +269,7 @@ struct EngineClient {
 
                     let (bytes, response) = try await session.bytes(for: request)
                     let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-                    NSLog("DigApp: event stream opened with %d", status)
+                    NSLog("TribeSeek: event stream opened with %d", status)
 
                     guard status == 200 else {
                         continuation.finish(throwing: EngineError.badStatus(status, "event stream refused"))

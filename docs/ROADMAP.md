@@ -233,7 +233,7 @@ and repairs it; verify against Live 12 Suite and Live 13 Beta.
 | Warped Live sets | `digging/ableton.py` + ALS Observatory |
 | Crate store | `digging/crate.py` |
 | Pipeline states | `digging/pipeline.py`, `service.py` |
-| Design system | `native/DigApp/.../Theme.swift`, `UI-DIRECTION.md` |
+| Design system | `native/TribeSeek/.../Theme.swift`, `UI-DIRECTION.md` |
 
 The gap is orchestration and interface, not core capability.
 
@@ -246,7 +246,7 @@ Rename app/target/bundle/paths with state migration; rail becomes Search /
 Crates / Rolodex / Rig; delete the Audition tab in favour of the tray; rename
 settings to Rig and drop "Digging" from user-facing copy; retire MVSEP from the
 default path. Exit: the app says Tribe Seek everywhere, opens the old crate and
-settings unchanged, and no command mentions DigApp.
+settings unchanged, and every launch path is `native/TribeSeek/run.sh`.
 
 **Phase 1 — search workspace (2 sessions).**
 Top bar + tab strip; virtualized results; row selection drives the tray; result

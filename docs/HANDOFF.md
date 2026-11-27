@@ -12,7 +12,7 @@ separate stems → Ableton Live.
 Two front ends exist:
 
 - **GTK** (original, functional, has the only separation-setup UI).
-- **`native/DigApp`** (SwiftUI, this session's work; now the daily client) —
+- **`native/TribeSeek`** (SwiftUI, this session's work; now the daily client) —
   browse, live search, audition with AVAudioEngine, Keep, drag-out, engine
   supervision. Its look is specified in [UI-DIRECTION.md](UI-DIRECTION.md).
 
@@ -72,15 +72,15 @@ NICOTINE_API_PORT=8766 NICOTINE_API_TOKEN=devtoken \
 Native client (starts the engine itself when 8766 is free):
 
 ```sh
-native/DigApp/run.sh
+native/TribeSeek/run.sh
 ```
 
 Tests / lint:
 
 ```sh
 XDG_CONFIG_HOME=/tmp/digcfg .venv/bin/python -m pytest pynicotine/tests -q   # 165 passed, 1 skipped
-(cd native/DigApp && swift test --disable-sandbox \
-   --scratch-path /tmp/digapp-build --cache-path /tmp/digapp-cache)         # 7 passed
+(cd native/TribeSeek && swift test --disable-sandbox \
+   --scratch-path /tmp/tribeseek-build --cache-path /tmp/tribeseek-cache)         # 7 passed
 .venv/bin/python -m pylint --rcfile=pyproject.toml pynicotine/engineapi pynicotine/digging
 ```
 
@@ -153,9 +153,9 @@ accepts `notify_frontend=False`.
 (Separation… dialog), `digprefs.py` (Preferences → Digging), plus audition
 hooks in `userbrowse.py`.
 
-### Native — `native/DigApp/Sources/DigApp/` (27 Swift files)
+### Native — `native/TribeSeek/Sources/TribeSeek/` (27 Swift files)
 
-`DigApp.swift`, `AppModel.swift`, `BrowserModel.swift`,
+`TribeSeek.swift`, `AppModel.swift`, `BrowserModel.swift`,
 `SearchAndCrateModels.swift`, `AuditionModel.swift`, `SelfTest.swift`;
 `Theme.swift`, `Skin.swift`, `Materials.swift`, `Controls.swift`,
 `Waveform.swift`; `Shell/AppShell.swift`, `Shell/Transport.swift`,
@@ -185,7 +185,7 @@ hooks in `userbrowse.py`.
   an offline search re-runs on login.
 - **Engine watchdog**: 3 failed health checks (5 s apart) → respawn. Verified by
   killing the engine: fresh one up and logged in in ~20 s, pending search re-ran.
-- **UI**: Suno palette default (`DIG_SKIN=arca` for the old one), hardware caps,
+- **UI**: Suno palette default (`TRIBE_SKIN=arca` for the old one), hardware caps,
   traffic lights clear of the rail, draggable full-bleed window.
 
 Useful verification commands:
@@ -194,7 +194,7 @@ Useful verification commands:
 B='Authorization: Bearer devtoken'
 curl -s -H "$B" http://127.0.0.1:8766/state
 curl -sN -H "$B" http://127.0.0.1:8766/events        # SSE (chunked)
-DIG_SELFTEST=1 NICOTINE_API_TOKEN=devtoken native/DigApp/run.sh
+TRIBE_SELFTEST=1 NICOTINE_API_TOKEN=devtoken native/TribeSeek/run.sh
 ```
 
 ---
@@ -221,7 +221,7 @@ DIG_SELFTEST=1 NICOTINE_API_TOKEN=devtoken native/DigApp/run.sh
    searches. The watchdog recovers it; the cause is upstream, not ours.
 10. **Engine log path**: `~/Library/Logs` is not writable under the sandbox, so
     the child engine logs to
-    `/var/folders/.../T/DigApp-engine.log` (NSLog prints the exact path).
+    `/var/folders/.../T/TribeSeek-engine.log` (NSLog prints the exact path).
 11. **Orphan engine on SIGTERM**: a normal Quit terminates the child; killing the
     app can leave it. `lsof -nP -iTCP:8766 -sTCP:LISTEN -t | xargs kill`.
 12. **Sandbox writes**: `~/Music` and `~/.local/share/nicotine` are denied, so
@@ -269,18 +269,18 @@ Run flags (environment):
 | Flag | Effect |
 |---|---|
 | `NICOTINE_API_URL` / `NICOTINE_API_TOKEN` | attach to a running engine |
-| `DIG_OPEN=<user>` | browse a peer on launch |
-| `DIG_AUTO=1` | audition the first file after the first browse |
-| `DIG_SEARCH=<term>` | run a search on launch |
-| `DIG_SELFTEST=1` | headless PASS/FAIL check, exits non-zero on failure |
-| `DIG_SKIN=arca` | legacy palette (Suno is the default) |
-| `DIG_NO_LAUNCH=1` | never spawn an engine |
+| `TRIBE_OPEN=<user>` | browse a peer on launch |
+| `TRIBE_AUTO=1` | audition the first file after the first browse |
+| `TRIBE_SEARCH=<term>` | run a search on launch |
+| `TRIBE_SELFTEST=1` | headless PASS/FAIL check, exits non-zero on failure |
+| `TRIBE_SKIN=arca` | legacy palette (Suno is the default) |
+| `TRIBE_NO_LAUNCH=1` | never spawn an engine |
 
 Build quirks:
 
 - SwiftPM needs `--disable-sandbox` (the harness already sandboxes us and
   `sandbox-exec` is refused) and a scratch path outside this volume
-  (`/tmp/digapp-build`), otherwise the compiler hits I/O errors on the SSD.
+  (`/tmp/tribeseek-build`), otherwise the compiler hits I/O errors on the SSD.
 - Fonts: register the woff2/TTF at launch; Core Text names them
   `Manrope-*` and `IBMPlexMono-Regular`/`-Medium` (the family name does **not**
   resolve; a silent fallback renders SF Mono).
@@ -330,7 +330,7 @@ Build quirks:
   environment have been taken over before.
 - If the app starts but nothing connects, run with `--ci-mode` for a traceback.
 - The child engine log is the fastest diagnosis:
-  `tail -40 /var/folders/*/*/T/DigApp-engine.log`.
+  `tail -40 /var/folders/*/*/T/TribeSeek-engine.log`.
 - Never print `.dev/config` (plaintext password).
 - Only one client per Soulseek account; another `santero` session causes
   relogin kicks.
@@ -348,7 +348,7 @@ and `dropped` in the API. Diagnosed the "empty search": account relogin kicks +
 one upstream Bus-error crash + a 24 s client poll window.
 
 **2026-11-25 (late)** — Suno palette studied from their CSS and made the default
-(`DIG_SKIN=arca` keeps the old one); traffic lights cleared from the rail;
+(`TRIBE_SKIN=arca` keeps the old one); traffic lights cleared from the rail;
 window chrome made draggable; palette comparison shots in `docs/assets`.
 
 **2026-11-25** — Hardware control language (caps, wells, LEDs, knurling, lit

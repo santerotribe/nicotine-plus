@@ -8,7 +8,7 @@
 
 You are continuing a fork of Nicotine+ that has become a crate-digging tool for
 sampling: browse Soulseek → audition → keep → separate stems → Ableton Live.
-The Python engine is mature and exposes a local API; **`native/DigApp`** is a
+The Python engine is mature and exposes a local API; **`native/TribeSeek`** is a
 SwiftUI client that is now the daily front end. GTK still exists and still owns
 the only separation-setup UI.
 
@@ -25,10 +25,10 @@ native-client-v1 there — `origin` is upstream and read-only)
 
 Environment:
 - .venv created with --system-site-packages (Python 3.14.7, GTK 4.24.2, PyGObject)
-- Native: `native/DigApp/run.sh` (spawns the engine if 8766 is free)
+- Native: `native/TribeSeek/run.sh` (spawns the engine if 8766 is free)
 - Tests: `XDG_CONFIG_HOME=/tmp/digcfg .venv/bin/python -m pytest pynicotine/tests -q`
   (165 passed, 1 skipped) and
-  `(cd native/DigApp && swift test --disable-sandbox --scratch-path /tmp/digapp-build --cache-path /tmp/digapp-cache)`
+  `(cd native/TribeSeek && swift test --disable-sandbox --scratch-path /tmp/tribeseek-build --cache-path /tmp/tribeseek-cache)`
   (7 passed)
 - Never print .dev/config (it contains the Soulseek password).
 
@@ -78,7 +78,7 @@ Rules of engagement:
   (pynicotine/digging/nativedrag.py for GTK, Drag/DragOutHandle.swift for native).
 - Free the ports before restarting: kill PIDs from lsof on 2234 and 8766. If the
   app starts but nothing connects, use `--ci-mode` for a traceback.
-- SwiftPM needs `--disable-sandbox` and `/tmp/digapp-build` here; the SSD path
+- SwiftPM needs `--disable-sandbox` and `/tmp/tribeseek-build` here; the SSD path
   breaks the compiler cache.
 - Fonts are `Manrope-*` and `IBMPlexMono-Regular`/`-Medium` by Core Text name;
   the family name silently falls back to SF Mono.

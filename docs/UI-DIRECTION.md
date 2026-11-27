@@ -1,6 +1,6 @@
 # UI direction — the digging client
 
-**Status:** the spike is implemented in `native/DigApp` and follows this brief
+**Status:** the spike is implemented in `native/TribeSeek` and follows this brief
 for §2–§4 (tokens, registers, skeleton), §6 and §7 (components, interaction).
 Search and Crate are read-only lists; Live and Settings are placeholders. The
 decisions in §11 were taken as recommended: gold accent, 88 pt rail, persistent
@@ -260,7 +260,7 @@ transport strip is always instrument. This is what will make the app feel
 ## 8. SwiftUI shape
 
 ```
-Sources/DigApp/
+Sources/TribeSeek/
   Theme.swift             tokens + font registration (port of arca's Theme.swift)
   Controls/Keys.swift     DigKeyStyle, DigPrimaryKeyStyle, chips
   Shell/AppShell.swift    HStack: Rail · List · Detail; transport overlay
@@ -333,7 +333,7 @@ Hi-Tech's **extruded key** (top light, bottom shade, one saturated accent),
 Hekla's **brushed cap** (a gloss band, engraved legend), Eclyde's **amber LED**
 (darkness first, warmth only when active), PRO-5's **status LED per function**.
 
-### The primitives (`native/DigApp/Sources/DigApp/Materials.swift`)
+### The primitives (`native/TribeSeek/Sources/TribeSeek/Materials.swift`)
 
 | Material | Recipe |
 |---|---|
@@ -405,9 +405,9 @@ and the first rail item is inset **30 pt** so the traffic lights never sit on a
 control. The chrome is draggable (`NSWindow.isMovableByWindowBackground`) and
 the window background is the canvas colour, so no system grey shows at the edges.
 
-## 14. Palettes (`DIG_SKIN`)
+## 14. Palettes (`TRIBE_SKIN`)
 
-Two palettes share one structure. **Suno's is the default**; `DIG_SKIN=arca`
+Two palettes share one structure. **Suno's is the default**; `TRIBE_SKIN=arca`
 selects the original graphite-and-lemon palette at launch.
 
 | Token | `suno` (default) | `arca` (legacy) |
