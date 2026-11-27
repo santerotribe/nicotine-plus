@@ -200,6 +200,12 @@ struct EngineClient {
         _ = try await post("/search/\(token)/stop", as: Response.self)
     }
 
+    /// Stop the search and drop its results from the engine's store.
+    func deleteSearch(token: Int) async throws {
+        struct Response: Decodable { let stopped: Int }
+        _ = try await delete("/search/\(token)", as: Response.self)
+    }
+
     func separateCrateTrack(id: String) async throws {
         struct Response: Decodable { let separating: String }
         _ = try await post("/crate/\(escape(id))/separate", as: Response.self)

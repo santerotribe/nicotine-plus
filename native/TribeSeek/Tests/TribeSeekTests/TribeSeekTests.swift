@@ -17,6 +17,24 @@ final class TribeSeekTests: XCTestCase {
         XCTAssertEqual(TimeFormat.clock(3725), "62:05")
     }
 
+    @MainActor
+    func testSearchTabKnowsWhenItIsUnused() {
+        let tab = SearchModel()
+
+        XCTAssertTrue(tab.isEmptyTab)
+        XCTAssertEqual(tab.title, "New search")
+
+        tab.term = "  italo disco  "
+        XCTAssertEqual(tab.title, "italo disco")
+
+        tab.isSearching = true
+        XCTAssertFalse(tab.isEmptyTab)
+
+        tab.isSearching = false
+        tab.token = 12
+        XCTAssertFalse(tab.isEmptyTab)
+    }
+
     func testAuditionPayloadDecodesSourceAndPeer() throws {
 
         let json = """

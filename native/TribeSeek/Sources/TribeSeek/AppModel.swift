@@ -52,13 +52,28 @@ final class AppModel {
     var accountInUse = false
     var browse = BrowserModel()
     var audition = AuditionModel()
-    var search = SearchModel()
+    /// The tab on screen. Every open search is a SearchModel; closing a tab
+    /// discards its engine-side store, so eight tabs do not mean eight searches
+    /// worth of memory.
+    var search: SearchModel
+    var searchTabs: [SearchModel]
+    /// What is typed in the top bar, kept apart from the active tab's term so
+    /// a new query opens a tab instead of overwriting the one being read.
+    var searchDraft = ""
     var crate = CrateModel()
 
     private var eventTask: Task<Void, Never>?
     private var stemTask: Task<Void, Never>?
     private var loadedLocation = ""
     private var loadedSessionID = ""
+
+    private static let maxSearchTabs = 8
+
+    init() {
+        let first = SearchModel()
+        search = first
+        searchTabs = [first]
+    }
 
     var client: EngineClient? { supervisor.client }
     var isConnected: Bool { supervisor.phase == .ready && client != nil }
@@ -77,8 +92,10 @@ final class AppModel {
         statusText = supervisor.message
         browse.client = client
         audition.client = client
-        search.client = client
         crate.client = client
+        for tab in searchTabs {
+            tab.client = client
+        }
 
         if let snapshot = try? await client.state() {
             state = snapshot
@@ -96,9 +113,8 @@ final class AppModel {
         // A development aid: run a search on launch, so the results list can be
         // checked without typing.
         if let term = ProcessInfo.processInfo.environment["TRIBE_SEARCH"], !term.isEmpty {
-            section = .search
-            search.term = term
-            await search.run()
+            searchDraft = term
+            await submitSearch()
         }
 
         // A development aid: audition the first file so the transport and
@@ -141,13 +157,17 @@ final class AppModel {
             }
         }
 
-        await search.retryIfNeeded()
+        for tab in searchTabs {
+            await tab.retryIfNeeded()
+        }
     }
 
     func shutdown() {
         eventTask?.cancel()
         stemTask?.cancel()
-        search.cancel()
+        for tab in searchTabs {
+            tab.cancel()
+        }
         supervisor.stop()
     }
 
@@ -230,14 +250,15 @@ final class AppModel {
             }
 
             if let arrival = event.decode(SearchArrival.self),
-               arrival.token == search.token {
-                search.noteArrival(total: arrival.total)
+               let tab = searchTabs.first(where: { $0.token == arrival.token }) {
+                tab.noteArrival(total: arrival.total)
             }
 
         case "search_removed":
             struct Removed: Decodable { let token: Int }
-            if let removed = event.decode(Removed.self), removed.token == search.token {
-                search.clearLive()
+            if let removed = event.decode(Removed.self),
+               let tab = searchTabs.first(where: { $0.token == removed.token }) {
+                tab.clearLive()
             }
 
         case "audition":
@@ -322,6 +343,112 @@ final class AppModel {
         browse.selectedUser = user
         section = .shelf
         await browse.browse(user: user)
+    }
+
+    // MARK: - Search tabs
+
+    /// Return in the top bar. An unused tab runs in place; anything else opens
+    /// a new tab, so the results being read stay where they are.
+    func submitSearch() async {
+
+        let term = searchDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !term.isEmpty else { return }
+
+        if search.isEmptyTab {
+            search.term = term
+            await search.run()
+            return
+        }
+
+        if search.term.trimmingCharacters(in: .whitespacesAndNewlines) == term {
+            return
+        }
+
+        await openSearch(term: term)
+    }
+
+    func openSearch(term: String) async {
+
+        let tab = SearchModel()
+        tab.client = client
+        tab.term = term
+
+        search.setActive(false)
+        searchTabs.append(tab)
+        search = tab
+        searchDraft = term
+        section = .search
+
+        trimSearchTabs()
+        await tab.run()
+    }
+
+    /// The plus key reuses an empty tab when one is already sitting there.
+    func newBlankSearch() {
+
+        if let blank = searchTabs.first(where: { $0 !== search && $0.isEmptyTab }) {
+            activate(blank)
+            return
+        }
+
+        let tab = SearchModel()
+        tab.client = client
+
+        search.setActive(false)
+        searchTabs.append(tab)
+        search = tab
+        searchDraft = ""
+        section = .search
+
+        trimSearchTabs()
+    }
+
+    func activate(_ tab: SearchModel) {
+
+        guard tab !== search else { return }
+
+        search.setActive(false)
+        search = tab
+        tab.setActive(true)
+        searchDraft = tab.term
+        section = .search
+    }
+
+    func closeSearch(_ tab: SearchModel) async {
+
+        await tab.discard()
+        searchTabs.removeAll { $0 === tab }
+
+        if searchTabs.isEmpty {
+            let fresh = SearchModel()
+            fresh.client = client
+            searchTabs = [fresh]
+            search = fresh
+            searchDraft = ""
+            return
+        }
+
+        if tab === search, let next = searchTabs.last {
+            search = next
+            next.setActive(true)
+            searchDraft = next.term
+        }
+    }
+
+    /// Close the oldest inactive tab once the strip passes its cap.
+    private func trimSearchTabs() {
+
+        while searchTabs.count > Self.maxSearchTabs {
+            guard let victim = searchTabs.first(where: { $0 !== search }) else { break }
+
+            searchTabs.removeAll { $0 === victim }
+            victim.cancel()
+
+            if let client, let token = victim.token {
+                Task { try? await client.deleteSearch(token: token) }
+            }
+        }
     }
 
     func audition(user: String, folder: String, file: SharedFileRow) async {

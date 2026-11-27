@@ -6,31 +6,9 @@ import SwiftUI
 struct SearchColumn: View {
 
     @Bindable var model: AppModel
-    @FocusState private var fieldFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 8) {
-                DigSearchField(
-                    placeholder: "Search Soulseek",
-                    text: $model.search.term,
-                    onSubmit: { Task { await model.search.run() } },
-                    focus: $fieldFocused
-                )
-
-                Button("Go") {
-                    Task { await model.search.run() }
-                }
-                .buttonStyle(DigKeyStyle(dense: true))
-                .amberFocus()
-                .disabled(model.search.isSearching || model.search.term.isEmpty)
-            }
-            .padding(.horizontal, 12)
-            .frame(height: 44)
-            .onAppear { fieldFocused = true }
-
-            Divider().overlay(Theme.border)
-
             if model.search.results.isEmpty {
                 VStack(spacing: 8) {
                     if !model.search.error.isEmpty {
@@ -67,7 +45,7 @@ struct SearchColumn: View {
                             .padding(.horizontal, 16)
                     } else {
                         InstrumentLabel(text: "NO SEARCH YET")
-                        Text("Type a term and press Return.")
+                        Text("Type a term in the top bar and press Return.")
                             .font(Theme.sans(11))
                             .foregroundStyle(Theme.textMuted)
                     }

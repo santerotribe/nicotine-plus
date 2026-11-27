@@ -251,11 +251,12 @@ Each phase ends with both suites green, a running app, and a note in HANDOFF.
 Audition tab is gone and its pane is the expandable tray; settings is Rig. Still
 open: retiring MVSEP from the default path, which waits on the splitter.
 
-**Phase 1 — search workspace (2 sessions).**
-Top bar + tab strip; virtualized results; row selection drives the tray; result
-grouping by track; search store lifecycle (LRU over tabs, `DELETE /search/<id>`);
-saved searches. Exit: five searches open at once under 400 MB, closing a tab
-frees its results.
+**Phase 1 — search workspace (in progress).**
+Done: the search field lives in the top bar; every query opens a tab with its own
+state; inactive tabs stop polling; the strip caps at eight with an LRU close; and
+closing a tab deletes its engine-side store (`DELETE /search/<id>`).
+Open: result grouping by track, per-tab scroll restoration, saved searches.
+Exit: five searches open at once under 400 MB, closing a tab frees its results.
 
 **Phase 2 — shelf (3 sessions).**
 `Dig` from a result opens `Shelf(peer, dir)`; breadcrumb + sibling navigation;

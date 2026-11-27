@@ -187,3 +187,18 @@ def test_pages_clamp_negative_offsets_and_limits():
     assert page["offset"] == 0
     assert page["limit"] == 1
     assert len(page["results"]) == 1
+
+
+def test_remove_drops_every_page_of_a_search():
+
+    store = _store((1, "term"), (2, "other"))
+    store.record(FakeResponse(1, public=[_file("F\\a.mp3")]))
+    store.record(FakeResponse(2, public=[_file("F\\b.mp3")]))
+
+    assert store.remove(1) is True
+
+    assert store.get(1) is None
+    assert store.results_page(1) is None
+    assert store.users_page(1) is None
+    assert store.get(2).summary()["total"] == 1
+    assert store.remove(1) is False

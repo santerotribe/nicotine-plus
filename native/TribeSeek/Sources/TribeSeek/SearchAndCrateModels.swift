@@ -80,10 +80,17 @@ struct SearchGroup: Identifiable {
 
 @MainActor
 @Observable
-final class SearchModel {
+final class SearchModel: Identifiable {
+
+    /// Stable identity for the tab strip; two searches with the same term are
+    /// still two tabs.
+    let id = UUID()
 
     var client: EngineClient?
     var term = ""
+    /// Inactive tabs keep their results but stop polling, so eight open
+    /// searches cost one search worth of CPU.
+    private(set) var isActive = true
     var token: Int?
     var results: [SearchResultRow] = []
     var total = 0
@@ -104,6 +111,53 @@ final class SearchModel {
 
     var selected: SearchResultRow? {
         results.first { $0.id == selectedID }
+    }
+
+    /// A tab nobody has used yet: the next Return runs here instead of opening
+    /// yet another tab.
+    var isEmptyTab: Bool {
+        token == nil && results.isEmpty && !isSearching
+    }
+
+    var title: String {
+        let trimmed = term.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "New search" : trimmed
+    }
+
+    func setActive(_ active: Bool) {
+
+        guard active != isActive else { return }
+
+        isActive = active
+
+        if active {
+            if isLive {
+                Task { await refresh() }
+                startPolling()
+            }
+
+        } else {
+            pollTask?.cancel()
+            pollTask = nil
+            refreshTask?.cancel()
+            refreshTask = nil
+        }
+    }
+
+    /// Closing a tab: drop the engine-side results and everything held here.
+    func discard() async {
+
+        cancel()
+
+        if let client, let token {
+            try? await client.deleteSearch(token: token)
+        }
+
+        token = nil
+        results = []
+        total = 0
+        dropped = 0
+        selectedID = nil
     }
 
     /// "50,000+" when the engine hit its cap, plain "1,240" otherwise.
@@ -186,7 +240,8 @@ final class SearchModel {
 
         lastArrivalAt = Date()
 
-        if total > self.total {
+        // A background tab keeps its old window; it refreshes when activated.
+        if isActive && total > self.total {
             scheduleRefresh()
         }
     }

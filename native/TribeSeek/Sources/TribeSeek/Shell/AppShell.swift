@@ -200,16 +200,11 @@ struct RailItem: View {
 struct TopStrip: View {
 
     @Bindable var model: AppModel
+    @FocusState private var searchFocused: Bool
 
     var body: some View {
-        ZStack {
-            Text(model.section.title)
-                .font(Theme.sans(13, .semibold))
-                .tracking(0.3)
-                .foregroundStyle(Theme.textPrimary)
-                .shadow(color: .black.opacity(0.5), radius: 0, y: 0.5)
-
-            HStack {
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
                 HStack(spacing: 8) {
                     LED(isOn: connectionLED.isOn, color: connectionLED.color, size: 5)
 
@@ -226,15 +221,30 @@ struct TopStrip: View {
                 }
                 .padding(.leading, 12)
 
-                Spacer()
+                Spacer(minLength: 16)
 
-                HStack(spacing: 6) {
-                    iconKey("arrow.left.arrow.right", help: "Transfers")
-                    iconKey("bell", help: "Activity")
-                    iconKey("gearshape", help: "Settings")
+                DigSearchField(
+                    placeholder: "Search Soulseek — Return opens a tab",
+                    text: $model.searchDraft,
+                    onSubmit: { Task { await model.submitSearch() } },
+                    focus: $searchFocused
+                )
+                .frame(width: 320)
+
+                Button("Go") {
+                    Task { await model.submitSearch() }
                 }
+                .buttonStyle(DigKeyStyle(dense: true))
+                .amberFocus()
+                .disabled(model.searchDraft.trimmingCharacters(in: .whitespaces).isEmpty)
+                .padding(.trailing, 12)
             }
-            .padding(.trailing, 12)
+            .frame(height: 34)
+
+            Divider().overlay(Theme.border)
+
+            SearchTabStrip(model: model, focus: $searchFocused)
+                .frame(height: 30)
         }
         .frame(height: Theme.topStripHeight)
         .background(Material.chrome)
@@ -267,15 +277,6 @@ struct TopStrip: View {
         }
     }
 
-    private func iconKey(_ symbol: String, help: String) -> some View {
-        Button {
-        } label: {
-            Image(systemName: symbol)
-        }
-        .buttonStyle(DigIconKeyStyle(diameter: 26))
-        .amberFocus(13)
-        .help(help)
-    }
 }
 
 // MARK: - Shared empty state
