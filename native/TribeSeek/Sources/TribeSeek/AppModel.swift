@@ -12,29 +12,29 @@ final class AppModel {
 
     enum Section: String, CaseIterable, Identifiable {
 
-        case browse, search, audition, crate, live, settings
+        // One workspace: search and shelf are ways of looking at the network,
+        // crates and the rolodex are what you keep, the rig configures it all.
+        case search, shelf, crates, rolodex, rig
 
         var id: String { rawValue }
 
         var title: String {
             switch self {
-            case .browse: "Browse"
             case .search: "Search"
-            case .audition: "Audition"
-            case .crate: "Crate"
-            case .live: "Live"
-            case .settings: "Digging"
+            case .shelf: "Shelf"
+            case .crates: "Crates"
+            case .rolodex: "Rolodex"
+            case .rig: "Rig"
             }
         }
 
         var symbol: String {
             switch self {
-            case .browse: "square.stack"
             case .search: "magnifyingglass"
-            case .audition: "waveform"
-            case .crate: "tray.full"
-            case .live: "music.note.list"
-            case .settings: "slider.horizontal.3"
+            case .shelf: "square.stack.3d.up"
+            case .crates: "tray.full"
+            case .rolodex: "person.2"
+            case .rig: "slider.horizontal.3"
             }
         }
     }
@@ -42,7 +42,9 @@ final class AppModel {
     let supervisor = EngineSupervisor()
     let player = AuditionPlayer()
 
-    var section: Section = .browse
+    var section: Section = .search
+    /// The expanded audition tray: the old Audition tab, folded into the shell.
+    var trayExpanded = false
     var state: EngineState?
     var statusText = ""
     /// True when the last disconnect was the server kicking us for another
@@ -85,10 +87,10 @@ final class AppModel {
 
         startEvents(client)
 
+        // The app opens on Search. A shelf is entered deliberately, from a
+        // result or from TRIBE_OPEN=<user>.
         if let target = ProcessInfo.processInfo.environment["TRIBE_OPEN"], !target.isEmpty {
             await browse(user: target)
-        } else if let first = browse.users.first, browse.selectedUser == nil {
-            await browse.select(user: first)
         }
 
         // A development aid: run a search on launch, so the results list can be
@@ -151,7 +153,7 @@ final class AppModel {
 
     /// Section switches are cheap; only the crate needs a fetch on entry.
     func activateSection() async {
-        if section == .crate {
+        if section == .crates {
             await crate.load()
         }
     }
@@ -318,6 +320,7 @@ final class AppModel {
 
         browse.users.insert(user, at: 0)
         browse.selectedUser = user
+        section = .shelf
         await browse.browse(user: user)
     }
 
@@ -334,7 +337,8 @@ final class AppModel {
             loadedLocation = ""
         }
 
-        section = .audition
+        // Auditioning never steals the screen: the tray opens where you are.
+        trayExpanded = true
         audition.begin(user: user, folder: folder, file: file)
 
         do {
@@ -371,6 +375,7 @@ final class AppModel {
 
         stemTask?.cancel()
         audition.clear()
+        trayExpanded = false
         player.stop()
         loadedSessionID = ""
         loadedLocation = ""

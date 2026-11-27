@@ -20,13 +20,11 @@ struct AppShell: View {
                 HStack(spacing: 0) {
                     Group {
                         switch model.section {
-                        case .browse:
-                            BrowseColumn(model: model)
                         case .search:
                             SearchColumn(model: model)
-                        case .audition:
-                            AuditionColumn(model: model)
-                        case .crate:
+                        case .shelf:
+                            BrowseColumn(model: model)
+                        case .crates:
                             CrateColumn(model: model)
                         default:
                             PlaceholderColumn(title: model.section.title,
@@ -39,14 +37,12 @@ struct AppShell: View {
 
                     Group {
                         switch model.section {
-                        case .browse:
-                            BrowseDetail(model: model)
                         case .search:
                             SearchDetail(model: model)
-                        case .crate:
+                        case .shelf:
+                            BrowseDetail(model: model)
+                        case .crates:
                             CrateDetail(model: model)
-                        case .audition:
-                            AuditionPane(model: model, compact: false)
                         default:
                             EmptyStatePane(
                                 symbol: model.section.symbol,
@@ -72,6 +68,14 @@ struct AppShell: View {
                     }
                 }
 
+                if model.trayExpanded, model.audition.state != nil {
+                    Divider().overlay(Theme.border)
+                    AuditionPane(model: model, compact: true)
+                        .frame(height: 300)
+                        .background(Theme.bgWorkspace)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+
                 Divider().overlay(Theme.border)
                 Transport(model: model)
             }
@@ -79,6 +83,7 @@ struct AppShell: View {
         .background(Theme.bgCanvas)
         .ignoresSafeArea(.container, edges: .top)
         .background(WindowConfigurator())
+        .animation(.easeInOut(duration: 0.18), value: model.trayExpanded)
         .task(id: model.section) { await model.activateSection() }
     }
 }
@@ -92,7 +97,7 @@ struct Rail: View {
     var body: some View {
         VStack(spacing: 0) {
             ForEach(AppModel.Section.allCases) { section in
-                if section == .audition || section == .crate || section == .settings {
+                if section == .crates || section == .rig {
                     RailSeparator()
                 }
 
@@ -104,17 +109,7 @@ struct Rail: View {
             Spacer(minLength: 8)
 
             account
-
-            Button {
-                model.section = .settings
-            } label: {
-                Image(systemName: "plus")
-                    .font(.system(size: 13, weight: .medium))
-            }
-            .buttonStyle(DigIconKeyStyle(diameter: 32))
-            .amberFocus(16)
-            .padding(.bottom, 14)
-            .help("Settings")
+                .padding(.bottom, 6)
         }
         .frame(width: Theme.railWidth)
         // Clear the traffic lights: the window is full-bleed, so the rail owns

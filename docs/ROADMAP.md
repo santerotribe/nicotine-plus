@@ -3,6 +3,10 @@
 2026-11-27 · supersedes the "digging" framing in HANDOFF.md §8. Written after a
 vision conversation; treat §12 (decisions) as the live list.
 
+**Status:** 0a (rename) and 0b (rail, tray) landed. Next: the search tab strip,
+then the shelf. Phase 4 (Passage) is on hold pending the cap/arm64/install
+conversation.
+
 ## 1. What this is
 
 Tribe Seek is a private instrument for one DJ collective. Soulseek is the
@@ -241,12 +245,11 @@ The gap is orchestration and interface, not core capability.
 
 Each phase ends with both suites green, a running app, and a note in HANDOFF.
 
-**Phase 0 — identity and spine (1 session).**
-Rename app/target/bundle/paths with state migration; rail becomes Search /
-Crates / Rolodex / Rig; delete the Audition tab in favour of the tray; rename
-settings to Rig and drop "Digging" from user-facing copy; retire MVSEP from the
-default path. Exit: the app says Tribe Seek everywhere, opens the old crate and
-settings unchanged, and every launch path is `native/TribeSeek/run.sh`.
+**Phase 0 — identity and spine (done, 2026-11-27).**
+0a: the app, target, binary, flags and launch path are Tribe Seek
+(`0d5246f45`). 0b: the rail is Search / Shelf / Crates / Rolodex / Rig; the
+Audition tab is gone and its pane is the expandable tray; settings is Rig. Still
+open: retiring MVSEP from the default path, which waits on the splitter.
 
 **Phase 1 — search workspace (2 sessions).**
 Top bar + tab strip; virtualized results; row selection drives the tray; result
@@ -266,7 +269,10 @@ between crates). Existing keeps are test data and get wiped, so there is no
 migration. Exit: a keep lands in the crate the user chose, with source
 user/folder recorded, and deleting works.
 
-**Phase 4 — Passage and Live insertion (3 sessions).**
+**Phase 4 — Passage and Live insertion — ON HOLD (2026-11-27).**
+The user is taking the 4:57 stereo cap, the arm64-only worker and the 4.2 GB
+install to Passage. Do not build the adapter until those answers land.
+**When resumed (3 sessions).**
 Splitter adapter + discovery + Rig card (Test key, model status) + one-output
 vocal lane + cancel + multi-stem passthrough; port the audioFabric surface;
 keep drag-out. Exit: Keep → playable vocal in under 90 s warm; insert into an

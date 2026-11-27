@@ -73,6 +73,17 @@ struct Transport: View {
                         .overlay(Rectangle().fill(Color.white.opacity(0.04)).offset(x: 1))
 
                     dragHandle
+
+                    Button {
+                        model.trayExpanded.toggle()
+                    } label: {
+                        Image(systemName: model.trayExpanded ? "chevron.down" : "chevron.up")
+                            .font(.system(size: 10, weight: .semibold))
+                    }
+                    .buttonStyle(DigIconKeyStyle(diameter: 26))
+                    .amberFocus(13)
+                    .help(model.trayExpanded ? "Hide the listening view" : "Show the listening view")
+
                     closeKey
                 }
             }
