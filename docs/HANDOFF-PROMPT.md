@@ -1,5 +1,11 @@
 # Handoff prompt (paste into a fresh session)
 
+> **Superseded in part.** The product plan changed on 2026-11-27: the app is now
+> **Tribe Seek**, with a single-window search/shelf workspace, DJ and Sample
+> crates, a collective Rolodex, Passage Preset 62 as the local splitter, and
+> audioFabric's Remote Script for Live insertion. Read [ROADMAP.md](ROADMAP.md)
+> first; this prompt's task list is history.
+
 You are continuing a fork of Nicotine+ that has become a crate-digging tool for
 sampling: browse Soulseek → audition → keep → separate stems → Ableton Live.
 The Python engine is mature and exposes a local API; **`native/DigApp`** is a
