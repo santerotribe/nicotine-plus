@@ -69,7 +69,7 @@ def keep_source(core, source: TrackSource, settings: DiggingSettings | None = No
     _notify(track)
 
     try:
-        Ledger(settings.rolodex_path, settings.member_name).add(
+        Ledger(settings.rolodex_path, settings.member_name, settings.member_id).add(
             source.username, source.virtual_path, source.folder_path,
             source.filename, kind,
         )

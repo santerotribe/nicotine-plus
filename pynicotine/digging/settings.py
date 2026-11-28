@@ -68,6 +68,7 @@ def public_settings(settings: "DiggingSettings") -> dict:
     for field in SECRET_FIELDS:
         payload[field + "_set"] = bool(getattr(settings, field, ""))
 
+    payload["member_id"] = settings.member_id
     payload["presets"] = sorted(STEM_PRESETS)
     payload["warp_modes"] = sorted(WARP_MODES)
     payload["renderer_available"] = {
@@ -236,8 +237,9 @@ class DiggingSettings:
     open_after_build: bool = True
 
     # Collective ledger
-    rolodex_path: str = ""               # point at a synced folder to share
+    rolodex_path: str = ""               # directory, or a legacy rolodex.json
     member_name: str = ""                # who found it
+    member_id: str = ""                  # stable per machine/member
 
     # Auditioning
     preview_bytes: int = 2 * 1024 * 1024  # roughly 40-60 s of MP3, enough to judge a loop
@@ -277,6 +279,15 @@ class DiggingSettings:
                                 or os.environ.get("USER")
                                 or os.environ.get("USERNAME")
                                 or "unknown")
+
+        if not self.member_id:
+            import hashlib
+            import socket
+
+            node = socket.gethostname() or "host"
+            self.member_id = hashlib.sha1(
+                f"{node}:{self.member_name}".encode("utf-8")
+            ).hexdigest()[:12]
 
     @property
     def path(self) -> Path:

@@ -43,8 +43,8 @@
 
 | Finding | Why |
 |---|---|
-| F10 (part) | Unique temp + fsync + re-read are in; per-entry revisions/merge under a syncing filesystem are still a design decision. |
-| F11 (part) | Stars are per-member in the ledger; a stable member identity and removing another member's star are not implemented. |
-| F14 | Server-side sort + top-N and aggregate caching per browse generation. The compute is cheap (24 ms/100k); the client still materialises every folder. |
-| F15 (part) | 503 is honest, but a queued mutation can still apply after the timeout; idempotency keys are the real fix. |
-| F32 (part) | `/crate/keep` documented; the API still has no version field. |
+| F10 | Closed: one file per entry in a ledger directory (legacy `rolodex.json` migrates), so synced members never rewrite each other's entries. Same-entry last-write-wins. |
+| F11 | Closed: `member_id` (machine + member, overridable) keys stars, and entries carry `found_by_id`; removing your own star cannot remove another member's. |
+| F14 (part) | Engine caches aggregates per browse generation and sorts server-side (`?sort=name\|files\|audio\|size`); the client stops at 10,000 folders and shows "FIRST 10,000 BINS". True lazy top-N remains. |
+| F15 (part) | 503 plus idempotent keep/dedupe handlers; a queued mutation can still apply, so the message says so. |
+| F32 | Closed: `/health` carries `"api": 2`; `/crate/keep` documented. |

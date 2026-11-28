@@ -59,6 +59,11 @@ struct BrowseDetail: View {
                         InstrumentLabel(text: "\(summary.files) FILES")
                         InstrumentLabel(text: "\(summary.folders) FOLDERS")
                         InstrumentLabel(text: size(summary.sharedSize))
+
+                        if model.browse.foldersTruncated {
+                            InstrumentLabel(text: "FIRST 10,000 BINS",
+                                            color: Theme.accent)
+                        }
                     }
                 } else {
                     InstrumentLabel(text: model.browse.isBrowsing ? "BROWSING…" : "NO SUMMARY")

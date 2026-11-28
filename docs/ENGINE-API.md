@@ -32,7 +32,7 @@ NICOTINE_API_PORT=8766 NICOTINE_API_TOKEN=secret \
 | POST | `/settings` | apply a validated subset of settings |
 | GET | `/events` | Server-Sent Events push channel |
 | GET | `/users/<user>/summary` | folders/files/shared size for a browsed user |
-| GET | `/users/<user>/folders?offset=&limit=` | paged folders with files/size/formats/lossless/duration |
+| GET | `/users/<user>/folders?offset=&limit=&sort=` | paged folders with size/audio/lossless/duration/digest; sort name/files/audio/size |
 | GET | `/users/<user>/files?folder=&offset=&limit=` | paged files of one folder |
 | POST | `/users/<user>/browse` | request the user's share list |
 | GET | `/users/<user>/status` | cached online/away/offline, or `unknown` |

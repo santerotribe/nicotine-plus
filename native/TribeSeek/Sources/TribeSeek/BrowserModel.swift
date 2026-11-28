@@ -142,6 +142,10 @@ final class BrowserModel {
     var error = ""
     /// Short-lived confirmation after a bulk action, shown in the shelf header.
     var note = ""
+    /// A share larger than the cap loads its first N folders, not all of them.
+    var foldersTruncated = false
+
+    private static let folderCap = 10_000
 
     var filteredFolders: [FolderRow] {
 
@@ -391,6 +395,7 @@ final class BrowserModel {
 
         var collected: [FolderRow] = []
         var offset = 0
+        foldersTruncated = false
 
         while true {
             guard let page = try? await client.folders(user: user, offset: offset, limit: 500) else { break }
@@ -411,6 +416,11 @@ final class BrowserModel {
                 })
 
             offset += page.folders.count
+
+            if collected.count >= Self.folderCap {
+                foldersTruncated = true
+                break
+            }
 
             if offset >= page.total || page.folders.isEmpty { break }
         }

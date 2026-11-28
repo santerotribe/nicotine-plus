@@ -135,6 +135,8 @@ class BrowsedUser:
     shared_size: int | None = None
     public_folders: dict[str, list[SharedFile]] = field(default_factory=dict)
     private_folders: dict[str, list[SharedFile]] = field(default_factory=dict)
+    stats_cache: dict[str, dict] = field(default_factory=dict)
+    stats_key: tuple = ()
     saving: bool = False
 
     def clear(self) -> None:
@@ -264,7 +266,8 @@ class UserBrowse:
             "messages": self._browse_timing.get(username, {}).get("messages", 0),
         }
 
-    def folder_page(self, username: str, offset: int = 0, limit: int = 200) -> dict | None:
+    def folder_page(self, username: str, offset: int = 0, limit: int = 200,
+                    sort: str = "name") -> dict | None:
         """Page through a user's folders with what each one holds.
 
         The native shelf sorts and filters bins by size, format mix and length,
@@ -280,6 +283,7 @@ class UserBrowse:
         # One snapshot for the whole page: a browse that clears or appends while
         # this runs must not yield an old total with zeroed rows.
         snapshot: dict[str, list] = {}
+        total_size = 0
 
         for folder, files in chain(
             browsed_user.public_folders.items(),
@@ -287,15 +291,47 @@ class UserBrowse:
         ):
             snapshot.setdefault(folder, []).extend(files)
 
-        folders = list(snapshot)
+            for file in files:
+                try:
+                    total_size += int(file.size or 0)
+                except (TypeError, ValueError):
+                    pass
+
+        # Cache the aggregates per browse generation; pages then only slice.
+        stats_key = (len(snapshot), sum(len(files) for files in snapshot.values()), total_size)
+
+        if stats_key != browsed_user.stats_key:
+            browsed_user.stats_cache = {
+                folder: _folder_info(folder, files)
+                for folder, files in snapshot.items()
+            }
+            browsed_user.stats_key = stats_key
+
+        sort = sort if sort in ("name", "files", "audio", "size") else "name"
+
+        def sort_key(folder: str):
+            info = browsed_user.stats_cache[folder]
+
+            if sort == "files":
+                return (-info["files"], folder.lower())
+
+            if sort == "audio":
+                return (-info["audio_files"], folder.lower())
+
+            if sort == "size":
+                return (-info["size"], folder.lower())
+
+            return (folder.lower(),)
+
+        folders = sorted(browsed_user.stats_cache, key=sort_key)
         total = len(folders)
         offset = max(0, int(offset))
         limit = max(1, int(limit))
         page = folders[offset:offset + limit]
-        details = [_folder_info(folder, snapshot.get(folder, [])) for folder in page]
+        details = [browsed_user.stats_cache[folder] for folder in page]
 
         return {"username": username, "total": total, "offset": offset,
-                "limit": limit, "folders": details}
+                "limit": limit, "sort": sort, "folders": details}
 
     def file_page(self, username: str, folder_path: str = "", offset: int = 0,
                   limit: int = 500) -> dict | None:

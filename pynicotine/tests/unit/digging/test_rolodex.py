@@ -49,3 +49,41 @@ def test_stars_are_per_member(tmp_path):
 
     assert len(remaining) == 1
     assert remaining[0]["found_by"] == "santero"
+
+
+def test_legacy_file_migrates_into_a_directory(tmp_path):
+
+    import json
+
+    legacy = tmp_path / "rolodex.json"
+    legacy.write_text(json.dumps({"version": 1, "entries": [{
+        "peer": "dj",
+        "virtual_path": "A\\a.flac",
+        "folder": "A",
+        "filename": "a.flac",
+        "kind": "sample",
+        "found_by": "santero",
+        "added_at": 1,
+    }]}))
+
+    ledger = Ledger(legacy, "reader")
+
+    assert len(ledger.as_list()) == 1
+    assert (tmp_path / "rolodex").is_dir()
+
+
+def test_stars_use_the_stable_member_id(tmp_path):
+
+    path = tmp_path / "rolodex"
+
+    Ledger(path, "santero", "id-a").star("dj", True)
+    Ledger(path, "santero", "id-b").star("dj", True)
+
+    assert len(Ledger(path, "reader", "id-c").as_list()) == 2
+
+    Ledger(path, "santero", "id-b").star("dj", False)
+
+    remaining = Ledger(path, "reader").as_list()
+
+    assert len(remaining) == 1
+    assert remaining[0]["found_by_id"] == "id-a"

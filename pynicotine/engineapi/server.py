@@ -272,6 +272,7 @@ class Handler(BaseHTTPRequestHandler):
 
             return self._reply(HTTPStatus.OK, {
                 "ok": True,
+                "api": 2,
                 "version": pynicotine.__version__,
                 "logged_in": bool(core.users.login_status),
                 "username": core.users.login_username,
@@ -338,7 +339,8 @@ class Handler(BaseHTTPRequestHandler):
         if len(parts) == 3 and parts[0] == "users" and parts[2] == "folders":
             offset = self._int(query, "offset", 0)
             limit = self._int(query, "limit", DEFAULT_LIMIT)
-            page = core.userbrowse.folder_page(parts[1], offset, limit)
+            page = core.userbrowse.folder_page(
+                parts[1], offset, limit, query.get("sort", "name"))
 
             if page is None:
                 return self._error(HTTPStatus.NOT_FOUND, "user has not been browsed")
@@ -375,11 +377,12 @@ class Handler(BaseHTTPRequestHandler):
             from pynicotine.digging.settings import DiggingSettings
 
             settings = DiggingSettings.load()
-            ledger = Ledger(settings.rolodex_path, settings.member_name)
+            ledger = Ledger(settings.rolodex_path, settings.member_name, settings.member_id)
 
             return self._reply(HTTPStatus.OK, {
                 "path": str(ledger.path),
                 "member": ledger.member,
+                "member_id": ledger.member_id,
                 "entries": ledger.as_list(),
             })
 
@@ -631,7 +634,7 @@ class Handler(BaseHTTPRequestHandler):
 
             def apply_star() -> list[dict]:
                 settings = DiggingSettings.load()
-                ledger = Ledger(settings.rolodex_path, settings.member_name)
+                ledger = Ledger(settings.rolodex_path, settings.member_name, settings.member_id)
                 ledger.star(peer, starred)
                 return ledger.as_list()
 
