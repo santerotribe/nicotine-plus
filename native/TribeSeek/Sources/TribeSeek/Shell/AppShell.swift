@@ -20,6 +20,9 @@ struct AppShell: View {
                 if model.section == .search {
                     SearchWorkspace(model: model)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if model.section == .shelf {
+                    BrowseDetail(model: model)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                 HStack(spacing: 0) {
                     Group {

@@ -9,6 +9,7 @@ struct BrowseDetail: View {
     @Bindable var model: AppModel
 
     @State private var selectedFile: String?
+    @State private var showPeers = false
     @FocusState private var filesFocused: Bool
 
     var body: some View {
@@ -34,11 +35,11 @@ struct BrowseDetail: View {
 
             HStack(spacing: 0) {
                 folderList
-                    .frame(width: Theme.folderColumnWidth)
 
                 Divider().overlay(Theme.border)
 
                 fileList
+                    .frame(width: 470)
             }
         }
     }
@@ -74,6 +75,19 @@ struct BrowseDetail: View {
 
             Spacer()
 
+            Button("Switch peer") {
+                showPeers = true
+            }
+            .buttonStyle(DigKeyStyle(dense: true))
+            .amberFocus()
+            .popover(isPresented: $showPeers, arrowEdge: .bottom) {
+                BrowseColumn(model: model)
+                    .frame(width: 330, height: 470)
+                    .onChange(of: model.browse.selectedUser) { _, _ in
+                        showPeers = false
+                    }
+            }
+
             Button("Refresh") {
                 Task { await model.browse.browse(user: user) }
             }
@@ -102,38 +116,57 @@ struct BrowseDetail: View {
                 .help(model.browse.binGrid ? "List the folders" : "Show the bins")
             }
             .padding(.horizontal, 10)
-            .frame(height: 38)
+            .frame(height: 34)
+
+            HStack(spacing: 4) {
+                ForEach(BrowserModel.BinSort.allCases) { sort in
+                    Button(sort.title) {
+                        model.browse.binSort = sort
+                    }
+                    .buttonStyle(ShelfChipStyle(isOn: model.browse.binSort == sort))
+                    .amberFocus(3)
+                }
+
+                Spacer()
+            }
+            .padding(.horizontal, 10)
+            .frame(height: 28)
 
             Divider().overlay(Theme.border)
 
+            ScrollViewReader { proxy in
             ScrollView {
-                if model.browse.binGrid, !model.browse.filteredFolders.isEmpty {
+                if model.browse.binGrid, !model.browse.sortedFolders.isEmpty {
                     LazyVGrid(
-                        columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible(), spacing: 6)],
-                        spacing: 6
+                        columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3),
+                        spacing: 8
                     ) {
-                        ForEach(model.browse.filteredFolders) { folder in
+                        ForEach(model.browse.sortedFolders) { folder in
                             BinCard(
                                 folder: folder,
-                                isSelected: model.browse.selectedFolder == folder.name
+                                isSelected: model.browse.selectedFolder == folder.name,
+                                isFresh: model.browse.fresh.contains(folder.name)
                             ) {
                                 Task { await model.browse.loadFiles(folder: folder.name) }
                             }
+                            .id(folder.name)
                         }
                     }
-                    .padding(8)
+                    .padding(10)
                 } else {
                     LazyVStack(spacing: 0) {
-                    ForEach(model.browse.filteredFolders) { folder in
+                    ForEach(model.browse.sortedFolders) { folder in
                         FolderRowView(
                             folder: folder,
-                            isSelected: model.browse.selectedFolder == folder.name
+                            isSelected: model.browse.selectedFolder == folder.name,
+                            isFresh: model.browse.fresh.contains(folder.name)
                         ) {
                             Task { await model.browse.loadFiles(folder: folder.name) }
                         }
+                        .id(folder.name)
                     }
 
-                    if model.browse.filteredFolders.isEmpty {
+                    if model.browse.sortedFolders.isEmpty {
                         if model.browse.isBrowsing && model.browse.folders.isEmpty {
                             HStack(spacing: 6) {
                                 ProgressView().controlSize(.small)
@@ -154,12 +187,53 @@ struct BrowseDetail: View {
                     .padding(.vertical, 4)
                 }
             }
+            .task(id: model.browse.selectedFolder) {
+                guard let folder = model.browse.selectedFolder else { return }
+                try? await Task.sleep(nanoseconds: 60_000_000)
+                withAnimation(.easeOut(duration: 0.15)) {
+                    proxy.scrollTo(folder, anchor: .center)
+                }
+            }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var inspectorHeader: some View {
+
+        if let name = model.browse.selectedFolder,
+           let folder = model.browse.folders.first(where: { $0.name == name }) {
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(folder.title)
+                    .font(Theme.sans(13, .semibold))
+                    .foregroundStyle(Theme.textPrimary)
+                    .lineLimit(2)
+
+                HStack(spacing: 10) {
+                    InstrumentLabel(text: "\(folder.count) FILES")
+                    InstrumentLabel(text: folder.sizeLabel)
+
+                    if !folder.qualityLabel.isEmpty {
+                        InstrumentLabel(text: folder.qualityLabel)
+                    }
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 9)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Theme.bgBase)
+            .overlay(alignment: .bottom) {
+                Rectangle().fill(Theme.border).frame(height: 1)
+            }
         }
     }
 
     private var fileList: some View {
 
         VStack(spacing: 0) {
+            inspectorHeader
+
             HStack(spacing: 10) {
                 InstrumentLabel(text: "FILE").frame(maxWidth: .infinity, alignment: .leading)
                 InstrumentLabel(text: "LENGTH").frame(width: 58, alignment: .trailing)
@@ -260,6 +334,7 @@ struct FolderRowView: View {
 
     let folder: BrowserModel.FolderRow
     let isSelected: Bool
+    let isFresh: Bool
     let action: () -> Void
 
     @State private var hover = false
@@ -268,31 +343,41 @@ struct FolderRowView: View {
         Button(action: action) {
             HStack(spacing: 8) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(folder.title)
-                        .font(Theme.sans(12.5, .medium))
-                        .foregroundStyle(isSelected ? Theme.textPrimary : Theme.textSecondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-
-                    if !parent.isEmpty {
-                        Text(parent)
-                            .font(Theme.mono(9))
-                            .foregroundStyle(Theme.textMuted)
+                    HStack(spacing: 6) {
+                        Text(folder.title)
+                            .font(Theme.sans(12.5, .medium))
+                            .foregroundStyle(isSelected ? Theme.textPrimary : Theme.textSecondary)
                             .lineLimit(1)
                             .truncationMode(.middle)
+
+                        if isFresh {
+                            LED(color: Theme.accent, size: 4)
+                        }
                     }
+
+                    Text(subtitle)
+                        .font(Theme.mono(8.5))
+                        .foregroundStyle(Theme.textMuted)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
                 }
 
                 Spacer(minLength: 4)
 
-                Text("\(folder.count)")
-                    .font(Theme.mono(11))
-                    .foregroundStyle(isSelected ? Theme.accent : Theme.textMuted)
-                    .monospacedDigit()
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("\(folder.count)")
+                        .font(Theme.mono(11))
+                        .foregroundStyle(isSelected ? Theme.accent : Theme.textMuted)
+                        .monospacedDigit()
+
+                    Text(folder.sizeLabel)
+                        .font(Theme.mono(8))
+                        .foregroundStyle(Theme.textMuted)
+                }
             }
             .padding(.leading, 12 + CGFloat(min(folder.depth, 3)) * 8)
             .padding(.trailing, 12)
-            .frame(height: 46)
+            .frame(height: 48)
             .background {
                 if isSelected {
                     WellSurface(radius: 0, tint: Theme.accent.opacity(0.05))
@@ -320,6 +405,12 @@ struct FolderRowView: View {
         parts.removeLast()
 
         return parts.joined(separator: "\\")
+    }
+
+    private var subtitle: String {
+        [parent, folder.qualityLabel]
+            .filter { !$0.isEmpty }
+            .joined(separator: " · ")
     }
 }
 
@@ -421,6 +512,7 @@ struct BinCard: View {
 
     let folder: BrowserModel.FolderRow
     let isSelected: Bool
+    let isFresh: Bool
     let action: () -> Void
 
     @State private var hover = false
@@ -428,12 +520,24 @@ struct BinCard: View {
     var body: some View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: 3) {
-                Text(folder.title)
-                    .font(Theme.sans(11.5, .medium))
-                    .foregroundStyle(isSelected ? Theme.textPrimary : Theme.textSecondary)
-                    .lineLimit(3)
-                    .multilineTextAlignment(.leading)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                HStack(alignment: .top, spacing: 4) {
+                    Text(folder.title)
+                        .font(Theme.sans(11.5, .medium))
+                        .foregroundStyle(isSelected ? Theme.textPrimary : Theme.textSecondary)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    if isFresh {
+                        LED(color: Theme.accent, size: 4)
+                            .padding(.top, 3)
+                    }
+                }
+
+                Text(folder.qualityLabel)
+                    .font(Theme.mono(7.5))
+                    .foregroundStyle(Theme.textMuted)
+                    .lineLimit(1)
 
                 Spacer(minLength: 2)
 
@@ -444,10 +548,16 @@ struct BinCard: View {
                         .monospacedDigit()
 
                     InstrumentLabel(text: "files", color: Theme.textMuted, tracking: 0.8)
+
+                    Spacer(minLength: 2)
+
+                    Text(folder.sizeLabel)
+                        .font(Theme.mono(8))
+                        .foregroundStyle(Theme.textMuted)
                 }
             }
             .padding(9)
-            .frame(height: 88)
+            .frame(height: 100)
             .background(
                 RoundedRectangle(cornerRadius: 5)
                     .fill(isSelected ? Theme.accent.opacity(0.06)
@@ -473,6 +583,32 @@ struct BinCard: View {
         parts.removeLast()
 
         return parts.joined(separator: "\\")
+    }
+}
+
+
+
+struct ShelfChipStyle: ButtonStyle {
+
+    let isOn: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(Theme.mono(8))
+            .tracking(0.8)
+            .foregroundStyle(isOn ? Theme.accent : Theme.textMuted)
+            .padding(.horizontal, 7)
+            .frame(height: 20)
+            .background(
+                RoundedRectangle(cornerRadius: 3)
+                    .fill(isOn ? Theme.accent.opacity(0.06) : Color.clear)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 3)
+                    .strokeBorder(isOn ? Theme.accent.opacity(0.45) : Theme.border,
+                                  lineWidth: 1)
+            )
+            .contentShape(Rectangle())
     }
 }
 

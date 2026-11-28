@@ -67,7 +67,16 @@ struct FolderPage: Decodable {
     let total: Int
     let offset: Int
     let limit: Int
-    let folders: [String: Int]
+    let folders: [FolderInfo]
+}
+
+struct FolderInfo: Decodable {
+    let name: String
+    let files: Int
+    let size: Int64
+    let formats: [String: Int]
+    let lossless: Int
+    let duration: Double
 }
 
 struct FilePage: Decodable {

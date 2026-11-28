@@ -30,7 +30,7 @@ NICOTINE_API_PORT=8766 NICOTINE_API_TOKEN=secret \
 | GET | `/state` | username, status, privileges, counters |
 | GET | `/events` | Server-Sent Events push channel |
 | GET | `/users/<user>/summary` | folders/files/shared size for a browsed user |
-| GET | `/users/<user>/folders?offset=&limit=` | paged folder names with file counts |
+| GET | `/users/<user>/folders?offset=&limit=` | paged folders with files/size/formats/lossless/duration |
 | GET | `/users/<user>/files?folder=&offset=&limit=` | paged files of one folder |
 | POST | `/users/<user>/browse` | request the user's share list |
 | GET | `/downloads?offset=&limit=` | transfers with raw progress |
@@ -122,7 +122,11 @@ GET /users/santero/summary
 
 GET /users/santero/folders?limit=3
 {"total":27,"offset":0,"limit":3,
- "folders":{"for santero":27,"for santero\\Ramoz ...":2,"for santero\\USB":1}}
+ "folders":[
+   {"name":"for santero","files":27,"size":4823910400,
+    "formats":{"flac":20,"mp3":7},"lossless":20,"duration":6480},
+   {"name":"for santero\\Ramoz ...","files":2,"size":104857600,
+    "formats":{"wav":2},"lossless":2,"duration":420}]}
 
 GET /users/santero/files?folder=for+santero&offset=0&limit=500
 {"total":27,"offset":0,"limit":500,

@@ -46,7 +46,7 @@ enum SelfTest {
             let folders = try await client.folders(user: "santero", limit: 5)
             check("folder page", !folders.folders.isEmpty, "\(folders.total) total")
 
-            guard let folder = folders.folders.keys.first else {
+            guard let folder = folders.folders.first?.name else {
                 return failures == 0
             }
 

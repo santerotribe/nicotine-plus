@@ -66,7 +66,10 @@ def test_folder_page_reports_counts():
     page = browse.folder_page("dj", offset=1, limit=1)
 
     assert page["total"] == 2
-    assert page["folders"] == {"B": 1}
+    assert page["folders"][0]["name"] == "B"
+    assert page["folders"][0]["files"] == 1
+    assert page["folders"][0]["formats"] == {"mp3": 1}
+    assert page["folders"][0]["duration"] == 200
 
 
 def test_user_summary_is_cheap():

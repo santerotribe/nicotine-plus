@@ -7,6 +7,7 @@ import json
 import os
 import time
 
+from collections import Counter
 from concurrent.futures import Future, ProcessPoolExecutor, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -42,6 +43,45 @@ from pynicotine.utils import (
 class TaskType(StrEnum):
     PROCESS = "process"
     THREAD = "thread"
+
+
+_LOSSLESS_FORMATS = {"flac", "wav", "aiff", "aif", "ape", "wv"}
+
+
+def _folder_info(folder: str, files: list[SharedFile]) -> dict:
+    """Aggregate one share folder: count, bytes, formats and playing time."""
+
+    size = 0
+    duration = 0
+    lossless = 0
+    formats: Counter[str] = Counter()
+
+    for file in files:
+        size += file.size or 0
+
+        name = file.path.rsplit("\\", 1)[-1]
+        extension = name.rsplit(".", 1)[-1].lower() if "." in name else ""
+
+        if extension:
+            formats[extension] += 1
+
+            if extension in _LOSSLESS_FORMATS:
+                lossless += 1
+
+        attributes = getattr(file, "attributes", None)
+        length = getattr(attributes, "length", None) if attributes else None
+
+        if length and length > 0:
+            duration += length
+
+    return {
+        "name": folder,
+        "files": len(files),
+        "size": size,
+        "formats": dict(formats.most_common(4)),
+        "lossless": lossless,
+        "duration": int(duration),
+    }
 
 
 @dataclass(slots=True, eq=False)
@@ -181,7 +221,12 @@ class UserBrowse:
         }
 
     def folder_page(self, username: str, offset: int = 0, limit: int = 200) -> dict | None:
-        """Page through a user's folder names without materialising them all."""
+        """Page through a user's folders with what each one holds.
+
+        The native shelf sorts and filters bins by size, format mix and length,
+        so the aggregate is computed here from the share already in memory
+        instead of making the front end fetch every folder's files.
+        """
 
         browsed_user = self.users.get(username)
 
@@ -193,13 +238,18 @@ class UserBrowse:
         offset = max(0, int(offset))
         limit = max(1, int(limit))
         page = folders[offset:offset + limit]
-        counts = {
-            folder: len(browsed_user.public_folders.get(folder) or browsed_user.private_folders.get(folder) or [])
+        details = [
+            _folder_info(
+                folder,
+                browsed_user.public_folders.get(folder)
+                or browsed_user.private_folders.get(folder)
+                or [],
+            )
             for folder in page
-        }
+        ]
 
         return {"username": username, "total": total, "offset": offset,
-                "limit": limit, "folders": counts}
+                "limit": limit, "folders": details}
 
     def file_page(self, username: str, folder_path: str = "", offset: int = 0,
                   limit: int = 500) -> dict | None:

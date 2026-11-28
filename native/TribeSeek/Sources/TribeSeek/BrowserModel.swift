@@ -21,6 +21,10 @@ final class BrowserModel {
 
         let name: String
         let count: Int
+        let size: Int64
+        let formats: [String: Int]
+        let lossless: Int
+        let seconds: Int
 
         var id: String { name }
 
@@ -30,6 +34,38 @@ final class BrowserModel {
 
         var depth: Int {
             max(0, name.split(separator: "\\").count - 1)
+        }
+
+        var sizeLabel: String {
+            ByteCountFormatter.string(fromByteCount: size, countStyle: .binary)
+        }
+
+        /// "FLAC 9 · MP3 1", most common first.
+        var qualityLabel: String {
+            formats.sorted { $0.value > $1.value }
+                .prefix(2)
+                .map { "\($0.key.uppercased()) \($0.value)" }
+                .joined(separator: " · ")
+        }
+
+        var losslessRatio: Double {
+            count > 0 ? Double(lossless) / Double(count) : 0
+        }
+    }
+
+    enum BinSort: String, CaseIterable, Identifiable {
+
+        case promising, fresh, name, files
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .promising: "Promising"
+            case .fresh: "New"
+            case .name: "Name"
+            case .files: "Files"
+            }
         }
     }
 
@@ -46,6 +82,9 @@ final class BrowserModel {
     var folderFilter = ""
     /// Folders as cards rather than rows.
     var binGrid = false
+    var binSort: BinSort = .promising
+    /// Folders that appeared or grew since this peer's last visit.
+    var fresh: Set<String> = []
     var isLoading = false
     var isBrowsing = false
     var error = ""
@@ -57,6 +96,61 @@ final class BrowserModel {
         guard !query.isEmpty else { return folders }
 
         return folders.filter { $0.name.localizedCaseInsensitiveContains(query) }
+    }
+
+    var sortedFolders: [FolderRow] {
+
+        let base = filteredFolders
+
+        switch binSort {
+        case .name:
+            return base.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+
+        case .files:
+            return base.sorted { $0.count > $1.count }
+
+        case .promising:
+            return base.sorted {
+                if $0.losslessRatio != $1.losslessRatio { return $0.losslessRatio > $1.losslessRatio }
+                if $0.count != $1.count { return $0.count > $1.count }
+                return $0.name.localizedStandardCompare($1.name) == .orderedAscending
+            }
+
+        case .fresh:
+            return base.sorted {
+                let leftFresh = fresh.contains($0.name)
+                let rightFresh = fresh.contains($1.name)
+
+                if leftFresh != rightFresh { return leftFresh }
+                if $0.losslessRatio != $1.losslessRatio { return $0.losslessRatio > $1.losslessRatio }
+                return $0.count > $1.count
+            }
+        }
+    }
+
+    /// Compare the share with the last visit and remember this one. A folder is
+    /// fresh when it is new to the share or has gained files; the first visit
+    /// marks nothing, because everything would be new.
+    private func noteFresh(user: String) {
+
+        let key = "seenFolders." + user
+        let previous = UserDefaults.standard.dictionary(forKey: key) as? [String: Int] ?? [:]
+        var current: [String: Int] = [:]
+
+        for folder in folders {
+            current[folder.name] = folder.count
+        }
+
+        if previous.isEmpty {
+            fresh = []
+        } else {
+            fresh = Set(folders.filter { folder in
+                guard let seen = previous[folder.name] else { return true }
+                return folder.count > seen
+            }.map(\.name))
+        }
+
+        UserDefaults.standard.set(current, forKey: key)
     }
 
     var filteredFiles: [SharedFileRow] {
@@ -155,8 +249,17 @@ final class BrowserModel {
             guard let page = try? await client.folders(user: user, offset: offset, limit: 500) else { break }
 
             collected.append(contentsOf: page.folders
-                .sorted { $0.key.localizedStandardCompare($1.key) == .orderedAscending }
-                .map { FolderRow(name: $0.key, count: $0.value) })
+                .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+                .map {
+                    FolderRow(
+                        name: $0.name,
+                        count: $0.files,
+                        size: $0.size,
+                        formats: $0.formats,
+                        lossless: $0.lossless,
+                        seconds: Int($0.duration)
+                    )
+                })
 
             offset += page.folders.count
 
@@ -164,6 +267,7 @@ final class BrowserModel {
         }
 
         folders = collected
+        noteFresh(user: user)
 
         let previous = selectedFolder
 
