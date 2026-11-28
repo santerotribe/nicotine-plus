@@ -42,9 +42,20 @@ final class BrowserModel {
     var files: [SharedFileRow] = []
     var fileTotal = 0
     var filter = ""
+    /// Narrows the folder column without touching the share itself.
+    var folderFilter = ""
     var isLoading = false
     var isBrowsing = false
     var error = ""
+
+    var filteredFolders: [FolderRow] {
+
+        let query = folderFilter.trimmingCharacters(in: .whitespaces)
+
+        guard !query.isEmpty else { return folders }
+
+        return folders.filter { $0.name.localizedCaseInsensitiveContains(query) }
+    }
 
     var filteredFiles: [SharedFileRow] {
         guard !filter.isEmpty else { return files }
@@ -63,8 +74,18 @@ final class BrowserModel {
         guard let client else { return }
 
         selectedUser = user
-        isBrowsing = true
         error = ""
+
+        // The engine already holds this share: use it instead of asking the
+        // peer again, which would blank the shelf while the answer is rebuilt.
+        if let cached = try? await client.summary(user: user), cached.folders > 0 {
+            summary = cached
+            isBrowsing = false
+            await loadFolders(user: user)
+            return
+        }
+
+        isBrowsing = true
         summary = nil
         folders = []
         files = []

@@ -72,7 +72,7 @@ enum Theme {
     static let railItemHeight: CGFloat = 72
     static let topStripHeight: CGFloat = 66
     static let listWidth: CGFloat = 400
-    static let folderColumnWidth: CGFloat = 240
+    static let folderColumnWidth: CGFloat = 300
     static let rowHeight: CGFloat = 48
     static let transportHeight: CGFloat = 48
     static let keyHeight: CGFloat = 28

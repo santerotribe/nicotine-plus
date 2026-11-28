@@ -79,18 +79,44 @@ struct BrowseDetail: View {
 
     private var folderList: some View {
 
-        ScrollView {
-            LazyVStack(spacing: 0) {
-                ForEach(model.browse.folders) { folder in
-                    FolderRowView(
-                        folder: folder,
-                        isSelected: model.browse.selectedFolder == folder.name
-                    ) {
-                        Task { await model.browse.loadFiles(folder: folder.name) }
+        VStack(spacing: 0) {
+            DigSearchField(placeholder: "Filter folders", text: $model.browse.folderFilter)
+                .padding(.horizontal, 10)
+                .frame(height: 36)
+
+            Divider().overlay(Theme.border)
+
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    ForEach(model.browse.filteredFolders) { folder in
+                        FolderRowView(
+                            folder: folder,
+                            isSelected: model.browse.selectedFolder == folder.name
+                        ) {
+                            Task { await model.browse.loadFiles(folder: folder.name) }
+                        }
+                    }
+
+                    if model.browse.filteredFolders.isEmpty {
+                        if model.browse.isBrowsing && model.browse.folders.isEmpty {
+                            HStack(spacing: 6) {
+                                ProgressView().controlSize(.small)
+                                InstrumentLabel(text: "WAITING FOR THE PEER", color: Theme.textMuted)
+                            }
+                            .padding(.vertical, 22)
+
+                        } else if !model.browse.folderFilter.isEmpty {
+                            Text("No folder in this share matches “\(model.browse.folderFilter)”.")
+                                .font(Theme.sans(11))
+                                .foregroundStyle(Theme.textMuted)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 20)
+                        }
                     }
                 }
+                .padding(.vertical, 4)
             }
-            .padding(.vertical, 6)
         }
     }
 
@@ -204,20 +230,32 @@ struct FolderRowView: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 8) {
-                Text(folder.title)
-                    .font(Theme.sans(12, folder.depth > 0 ? .regular : .medium))
-                    .foregroundStyle(isSelected ? Theme.textPrimary : Theme.textSecondary)
-                    .lineLimit(1)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(folder.title)
+                        .font(Theme.sans(12.5, .medium))
+                        .foregroundStyle(isSelected ? Theme.textPrimary : Theme.textSecondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+
+                    if !parent.isEmpty {
+                        Text(parent)
+                            .font(Theme.mono(9))
+                            .foregroundStyle(Theme.textMuted)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                }
 
                 Spacer(minLength: 4)
 
                 Text("\(folder.count)")
-                    .font(Theme.mono(10))
-                    .foregroundStyle(Theme.textMuted)
+                    .font(Theme.mono(11))
+                    .foregroundStyle(isSelected ? Theme.accent : Theme.textMuted)
+                    .monospacedDigit()
             }
-            .padding(.leading, 12 + CGFloat(min(folder.depth, 6)) * 12)
+            .padding(.leading, 12 + CGFloat(min(folder.depth, 3)) * 8)
             .padding(.trailing, 12)
-            .frame(height: 32)
+            .frame(height: 46)
             .background {
                 if isSelected {
                     WellSurface(radius: 0, tint: Theme.accent.opacity(0.05))
@@ -234,6 +272,17 @@ struct FolderRowView: View {
         }
         .buttonStyle(.plain)
         .onHover { hover = $0 }
+    }
+
+    private var parent: String {
+
+        var parts = folder.name.split(separator: "\\").map(String.init)
+
+        guard parts.count > 1 else { return "" }
+
+        parts.removeLast()
+
+        return parts.joined(separator: "\\")
     }
 }
 
