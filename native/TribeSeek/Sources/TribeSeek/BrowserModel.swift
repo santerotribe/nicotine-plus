@@ -74,7 +74,9 @@ final class BrowserModel {
             try await client.browse(user: user)
 
             // Own shares answer immediately; a peer's list settles when it lands.
-            for _ in 0..<40 {
+            // Big shares take a while to serialise; the engine keeps the
+            // request open, so wait a minute before calling the peer silent.
+            for _ in 0..<120 {
                 try? await Task.sleep(nanoseconds: 500_000_000)
 
                 if let snapshot = try? await client.summary(user: user), snapshot.folders > 0 {
@@ -167,6 +169,29 @@ final class BrowserModel {
 
         files = page.files
         fileTotal = page.total
+    }
+
+    /// Select one folder in the loaded share, for a dig from a search result.
+    /// Case differences happen; the share's spelling wins.
+    func focus(folder: String) async {
+
+        guard !folder.isEmpty else { return }
+
+        if folders.contains(where: { $0.name == folder }) {
+            await loadFiles(folder: folder)
+            return
+        }
+
+        if let match = folders.first(where: {
+            $0.name.localizedCaseInsensitiveCompare(folder) == .orderedSame
+        }) {
+            await loadFiles(folder: match.name)
+            return
+        }
+
+        guard !folders.isEmpty else { return }
+
+        error = "The peer lists \(folders.count) folders, but not that one."
     }
 
     func loadMoreFiles() async {

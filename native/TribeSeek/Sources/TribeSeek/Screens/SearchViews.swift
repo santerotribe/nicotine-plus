@@ -338,6 +338,15 @@ struct SearchSelectionBar: View {
                 .font(Theme.mono(10))
                 .foregroundStyle(Theme.textTertiary)
 
+            Button("Dig") {
+                Task {
+                    await model.dig(user: result.username, folder: result.folder)
+                }
+            }
+            .buttonStyle(DigKeyStyle(dense: true))
+            .amberFocus()
+            .help("Open this peer's shelf at this folder")
+
             Button("Audition") {
                 Task {
                     await model.audition(user: result.username,

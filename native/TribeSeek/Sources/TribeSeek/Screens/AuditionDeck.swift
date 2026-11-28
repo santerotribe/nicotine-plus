@@ -28,6 +28,7 @@ struct AuditionDeck: View {
 private struct RibbonDeck: View {
 
     @Bindable var model: AppModel
+    @State private var showStems = false
 
     var body: some View {
         GeometryReader { geometry in
@@ -249,7 +250,18 @@ private struct RibbonDeck: View {
             rule
 
             cell("STEMS", width: 188) {
-                stemsValue(state)
+                Button {
+                    showStems.toggle()
+                } label: {
+                    stemsValue(state)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(model.audition.stems.isEmpty)
+                .popover(isPresented: $showStems, arrowEdge: .bottom) {
+                    StemsPopover(model: model)
+                }
             }
 
             rule
@@ -469,3 +481,66 @@ private struct DeckChip: View {
             )
     }
 }
+
+
+// MARK: - Stems
+
+private struct StemsPopover: View {
+
+    @Bindable var model: AppModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                InstrumentLabel(text: "STEMS")
+
+                Spacer()
+
+                Text("\(model.audition.stems.count)")
+                    .font(Theme.mono(9))
+                    .foregroundStyle(Theme.textTertiary)
+            }
+
+            if model.audition.stems.isEmpty {
+                Text("Keep the track to separate it into stems.")
+                    .font(Theme.sans(11))
+                    .foregroundStyle(Theme.textMuted)
+            } else {
+                ForEach(model.audition.stems) { stem in
+                    HStack(spacing: 8) {
+                        LED(isOn: stem.exists,
+                            color: stem.exists ? Theme.statusSaved : Theme.statusError,
+                            size: 4)
+
+                        Text(stem.name.uppercased())
+                            .font(Theme.mono(10))
+                            .tracking(0.8)
+                            .foregroundStyle(Theme.textSecondary)
+
+                        Spacer()
+
+                        ZStack {
+                            if stem.exists {
+                                DragOutHandle(fileURL: stem.url)
+                            }
+
+                            HStack(spacing: 5) {
+                                Image(systemName: "square.and.arrow.up")
+                                    .font(.system(size: 9, weight: .medium))
+                                InstrumentLabel(text: "DRAG", color: Theme.textSecondary, tracking: 0.8)
+                            }
+                            .allowsHitTesting(false)
+                        }
+                        .frame(width: 68, height: 24)
+                        .background(CapSurface(radius: Theme.radiusPad))
+                    }
+                    .frame(height: 28)
+                }
+            }
+        }
+        .padding(12)
+        .frame(width: 320)
+        .background(Theme.bgWorkspace)
+    }
+}
+

@@ -117,6 +117,14 @@ final class AppModel {
             await submitSearch()
         }
 
+        // A development aid: open a shelf at one folder, for the dig path.
+        if let raw = ProcessInfo.processInfo.environment["TRIBE_DIG"],
+           let split = raw.firstIndex(of: "|") {
+            let user = String(raw[raw.startIndex..<split])
+            let folder = String(raw[raw.index(after: split)...])
+            await dig(user: user, folder: folder)
+        }
+
         // A development aid: audition the first file so the deck and waveform
         // can be checked without clicking. Falls back to the first search hit,
         // so a launch with TRIBE_SEARCH and TRIBE_AUTO lands on a live deck.
@@ -371,6 +379,35 @@ final class AppModel {
         browse.selectedUser = user
         section = .shelf
         await browse.browse(user: user)
+    }
+
+    /// Open a peer's shelf at one of their folders. The search result already
+    /// carries both, so this is the whole "dig into this record" gesture.
+    func dig(user: String, folder: String) async {
+
+        guard client != nil else { return }
+
+        // A dig from a cold launch can arrive while Soulseek is still logging
+        // in; the browse would be dropped and the shelf would stay empty.
+        for _ in 0..<40 {
+            if isOnline { break }
+            try? await Task.sleep(nanoseconds: 500_000_000)
+        }
+
+        section = .shelf
+
+        if browse.selectedUser == user, !browse.folders.isEmpty {
+            await browse.focus(folder: folder)
+            return
+        }
+
+        await browse(user: user)
+
+        // A slow or offline peer leaves its own error in place; do not mask it
+        // with a folder mismatch.
+        guard !browse.folders.isEmpty else { return }
+
+        await browse.focus(folder: folder)
     }
 
     // MARK: - Search tabs
