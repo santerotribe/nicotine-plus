@@ -194,6 +194,10 @@ final class RolodexModel {
 
             source.crew += 1
 
+            if !entry.folder.isEmpty {
+                source.folders[entry.folder, default: 0] += 1
+            }
+
             if !entry.foundBy.isEmpty {
                 source.foundBy.insert(entry.foundBy)
             }
