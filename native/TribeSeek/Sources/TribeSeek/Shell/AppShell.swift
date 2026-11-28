@@ -73,16 +73,8 @@ struct AppShell: View {
                 }
                 }
 
-                if model.trayExpanded, model.audition.state != nil {
-                    Divider().overlay(Theme.border)
-                    AuditionPane(model: model, compact: true)
-                        .frame(height: 300)
-                        .background(Theme.bgWorkspace)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
-
                 Divider().overlay(Theme.border)
-                Transport(model: model)
+                AuditionDeck(model: model)
             }
         }
         .background(Theme.bgCanvas)

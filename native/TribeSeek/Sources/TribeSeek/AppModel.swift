@@ -117,13 +117,34 @@ final class AppModel {
             await submitSearch()
         }
 
-        // A development aid: audition the first file so the transport and
-        // waveform can be checked without clicking.
-        if ProcessInfo.processInfo.environment["TRIBE_AUTO"] == "1",
-           let folder = browse.selectedFolder,
-           let file = browse.files.first,
-           let user = browse.selectedUser {
-            await audition(user: user, folder: folder, file: file)
+        // A development aid: audition the first file so the deck and waveform
+        // can be checked without clicking. Falls back to the first search hit,
+        // so a launch with TRIBE_SEARCH and TRIBE_AUTO lands on a live deck.
+        if ProcessInfo.processInfo.environment["TRIBE_AUTO"] == "1" {
+
+            if let folder = browse.selectedFolder,
+               let file = browse.files.first,
+               let user = browse.selectedUser {
+                await audition(user: user, folder: folder, file: file)
+
+            } else {
+                // Search results trickle in after the first page: give the
+                // network a few seconds before auditioning the first hit.
+                let playable = ["mp3", "flac", "wav", "aif", "aiff", "m4a", "ogg", "opus"]
+
+                for _ in 0..<20 {
+                    if let result = search.results.first(where: {
+                        playable.contains(($0.filename as NSString).pathExtension.lowercased())
+                    }) {
+                        await audition(user: result.username,
+                                       folder: result.folder,
+                                       file: result.asFile)
+                        break
+                    }
+
+                    try? await Task.sleep(nanoseconds: 1_000_000_000)
+                }
+            }
         }
     }
 
@@ -268,6 +289,13 @@ final class AppModel {
             }
 
             guard snapshot.id == audition.sessionID else { return }
+
+            // A session started outside this window (API, CLI) still deserves
+            // the deck; only the first snapshot opens it, so collapsing sticks.
+            if audition.state == nil {
+                trayExpanded = true
+            }
+
             apply(snapshot)
 
         case "audition_closed":
