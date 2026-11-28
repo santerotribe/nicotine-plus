@@ -17,6 +17,10 @@ struct AppShell: View {
                 TopStrip(model: model)
                 Divider().overlay(Theme.border)
 
+                if model.section == .search {
+                    SearchWorkspace(model: model)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
                 HStack(spacing: 0) {
                     Group {
                         switch model.section {
@@ -66,6 +70,7 @@ struct AppShell: View {
                             .frame(width: 10)
                             .allowsHitTesting(false)
                     }
+                }
                 }
 
                 if model.trayExpanded, model.audition.state != nil {

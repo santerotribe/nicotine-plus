@@ -23,21 +23,20 @@ struct SearchTabStrip: View {
                             onClose: { Task { await model.closeSearch(tab) } }
                         )
                     }
+
+                    Button {
+                        model.newBlankSearch()
+                        focus = true
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 10, weight: .semibold))
+                    }
+                    .buttonStyle(DigIconKeyStyle(diameter: 22))
+                    .amberFocus(11)
+                    .help("New search")
                 }
                 .padding(.horizontal, 8)
             }
-
-            Button {
-                model.newBlankSearch()
-                focus = true
-            } label: {
-                Image(systemName: "plus")
-                    .font(.system(size: 10, weight: .semibold))
-            }
-            .buttonStyle(DigIconKeyStyle(diameter: 22))
-            .amberFocus(11)
-            .help("New search")
-            .padding(.trailing, 8)
         }
         .frame(maxHeight: .infinity)
     }

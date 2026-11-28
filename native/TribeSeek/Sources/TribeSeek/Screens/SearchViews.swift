@@ -180,20 +180,32 @@ struct SearchResultRowView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(result.filename)
                     .font(Theme.sans(12, .medium))
-                    .foregroundStyle(isSelected ? Theme.textPrimary : Theme.textSecondary)
+                    .foregroundStyle(Theme.textPrimary)
+                    .opacity(isSelected ? 1 : 0.88)
                     .lineLimit(1)
+                    .truncationMode(.middle)
 
                 Text(result.username + (result.folder.isEmpty ? "" : " · " + result.folder))
                     .font(Theme.sans(10))
                     .foregroundStyle(Theme.textMuted)
                     .lineLimit(1)
+                    .truncationMode(.middle)
             }
 
-            Spacer(minLength: 6)
+            Spacer(minLength: 10)
+
+            InstrumentLabel(text: result.bitrate.map { "\($0) KBPS" } ?? "LOSSLESS",
+                            color: Theme.textTertiary)
+
+            Text(ByteCountFormatter.string(fromByteCount: result.size, countStyle: .binary))
+                .font(Theme.mono(10))
+                .foregroundStyle(Theme.textTertiary)
+                .frame(width: 64, alignment: .trailing)
 
             Text(result.length.map { TimeFormat.clock(Double($0)) } ?? "—")
                 .font(Theme.mono(10))
                 .foregroundStyle(Theme.textTertiary)
+                .frame(width: 44, alignment: .trailing)
 
             if !result.slotAvailable {
                 InstrumentLabel(text: "#\(result.queuePosition)", color: Theme.textMuted)
@@ -270,3 +282,76 @@ struct SearchDetail: View {
         }
     }
 }
+
+
+/// The results are the workspace: a selection bar under the list carries the
+/// actions that used to live in a detail pane, and the listening tray handles
+/// playback.
+struct SearchWorkspace: View {
+
+    @Bindable var model: AppModel
+
+    var body: some View {
+        VStack(spacing: 0) {
+            SearchColumn(model: model)
+
+            if let result = model.search.selected {
+                Divider().overlay(Theme.border)
+                SearchSelectionBar(model: model, result: result)
+            }
+        }
+    }
+}
+
+struct SearchSelectionBar: View {
+
+    @Bindable var model: AppModel
+    let result: SearchResultRow
+
+    var body: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(result.filename)
+                    .font(Theme.sans(12, .medium))
+                    .foregroundStyle(Theme.textPrimary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+
+                Text(result.username + (result.folder.isEmpty ? "" : " · " + result.folder))
+                    .font(Theme.mono(10))
+                    .foregroundStyle(Theme.textMuted)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            .layoutPriority(1)
+
+            Spacer(minLength: 8)
+
+            InstrumentLabel(text: result.bitrate.map { "\($0) KBPS" } ?? "LOSSLESS",
+                            color: Theme.textTertiary)
+
+            Text(ByteCountFormatter.string(fromByteCount: result.size, countStyle: .binary))
+                .font(Theme.mono(10))
+                .foregroundStyle(Theme.textTertiary)
+
+            Text(result.length.map { TimeFormat.clock(Double($0)) } ?? "—")
+                .font(Theme.mono(10))
+                .foregroundStyle(Theme.textTertiary)
+
+            Button("Audition") {
+                Task {
+                    await model.audition(user: result.username,
+                                         folder: result.folder,
+                                         file: result.asFile)
+                }
+            }
+            .buttonStyle(DigKeyStyle(dense: true))
+            .amberFocus()
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 54)
+        .background(Material.chrome)
+        .overlay(alignment: .top) { PanelRim() }
+    }
+}
+
