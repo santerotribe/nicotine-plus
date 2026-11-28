@@ -210,6 +210,14 @@ struct BrowseDetail: View {
                     .foregroundStyle(Theme.textPrimary)
                     .lineLimit(2)
 
+                if folder.isGeneric, !folder.collectionTitle.isEmpty {
+                    Text(folder.collectionTitle)
+                        .font(Theme.sans(11))
+                        .foregroundStyle(Theme.textMuted)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+
                 HStack(spacing: 10) {
                     InstrumentLabel(text: "\(folder.count) FILES")
                     InstrumentLabel(text: folder.sizeLabel)
@@ -520,6 +528,15 @@ struct BinCard: View {
     var body: some View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: 3) {
+                if folder.isGeneric, !folder.collectionTitle.isEmpty {
+                    Text(folder.collectionTitle.uppercased())
+                        .font(Theme.mono(7))
+                        .tracking(0.9)
+                        .foregroundStyle(Theme.textMuted)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+
                 HStack(alignment: .top, spacing: 4) {
                     Text(folder.title)
                         .font(Theme.sans(11.5, .medium))
@@ -557,7 +574,7 @@ struct BinCard: View {
                 }
             }
             .padding(9)
-            .frame(height: 100)
+            .frame(height: 104)
             .background(
                 RoundedRectangle(cornerRadius: 5)
                     .fill(isSelected ? Theme.accent.opacity(0.06)

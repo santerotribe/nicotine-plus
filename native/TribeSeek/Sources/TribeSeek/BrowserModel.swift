@@ -51,6 +51,47 @@ final class BrowserModel {
         var losslessRatio: Double {
             count > 0 ? Double(lossless) / Double(count) : 0
         }
+
+        /// "CD 4", "FLAC" and "Disc 2" say nothing on their own; the album or
+        /// collection above them does. These leaves inherit that context.
+        var isGeneric: Bool {
+            FolderRow.isGenericLeaf(title)
+        }
+
+        var collectionTitle: String {
+
+            var parts = name.split(separator: "\\").map(String.init)
+
+            guard parts.count > 1 else { return "" }
+
+            parts.removeLast()
+
+            while parts.count > 1, let last = parts.last, FolderRow.isGenericLeaf(last) {
+                parts.removeLast()
+            }
+
+            return parts.last ?? ""
+        }
+
+        static func isGenericLeaf(_ value: String) -> Bool {
+
+            let lower = value.lowercased().trimmingCharacters(in: .whitespaces)
+
+            let plain: Set<String> = [
+                "flac", "mp3", "wav", "aiff", "aif", "m4a", "lossless",
+                "music", "misc", "other", "stuff", "new", "downloads",
+                "albums", "cd", "disc", "disk",
+            ]
+
+            if plain.contains(lower) {
+                return true
+            }
+
+            return lower.range(
+                of: #"^(cd|disc|disk|part|vol|volume)[\s._-]*\d{1,3}$"#,
+                options: .regularExpression
+            ) != nil
+        }
     }
 
     enum BinSort: String, CaseIterable, Identifiable {
