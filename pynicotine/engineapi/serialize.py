@@ -48,6 +48,7 @@ def crate_track_dict(track) -> dict:
         "username": track.username,
         "filename": track.filename,
         "virtual_path": track.virtual_path,
+        "kind": track.kind,
         "status": track.status,
         "bpm": track.bpm,
         "local_path": track.local_path,

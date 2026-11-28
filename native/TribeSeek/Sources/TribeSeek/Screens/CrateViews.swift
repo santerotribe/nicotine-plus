@@ -10,14 +10,30 @@ struct CrateColumn: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                InstrumentLabel(text: "KEPT TRACKS")
-                Spacer()
-                Button("Reload") {
-                    Task { await model.crate.load() }
+            HStack(spacing: 4) {
+                ForEach(["sample", "dj"], id: \.self) { kind in
+                    Button(kind == "sample" ? "Sample" : "DJ") {
+                        model.crate.select(kind: kind)
+                    }
+                    .buttonStyle(ShelfChipStyle(isOn: model.crate.kind == kind))
+                    .amberFocus(3)
                 }
-                .buttonStyle(DigKeyStyle(dense: true))
-                .amberFocus()
+
+                Spacer()
+
+                Text("\(model.crate.tracks.count)")
+                    .font(Theme.mono(9))
+                    .foregroundStyle(Theme.textMuted)
+
+                Button {
+                    Task { await model.crate.load() }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 10, weight: .medium))
+                }
+                .buttonStyle(DigIconKeyStyle(diameter: 24))
+                .amberFocus(12)
+                .help("Reload the crates")
             }
             .padding(.horizontal, 12)
             .frame(height: 44)
@@ -39,10 +55,12 @@ struct CrateColumn: View {
 
             if model.crate.tracks.isEmpty {
                 VStack(spacing: 6) {
-                    Text("Nothing kept yet")
+                    Text(model.crate.kind == "dj" ? "No DJ crate yet" : "No sample crate yet")
                         .font(Theme.sans(12, .medium))
                         .foregroundStyle(Theme.textSecondary)
-                    Text("Keep an audition and it lands here while it downloads.")
+                    Text(model.crate.kind == "dj"
+                         ? "Keep a track for your sets, or move one over from the sample crate."
+                         : "Keep an audition and it lands here while it downloads.")
                         .font(Theme.sans(10))
                         .foregroundStyle(Theme.textMuted)
                         .multilineTextAlignment(.center)
@@ -150,6 +168,23 @@ struct CrateDetail: View {
                             Label("Separate now", systemImage: "scissors")
                         }
                         .buttonStyle(DigPrimaryKeyStyle())
+                        .amberFocus()
+
+                        Button(track.kind == "dj" ? "Move to Sample" : "Move to DJ") {
+                            Task {
+                                await model.crate.move(
+                                    id: track.id,
+                                    to: track.kind == "dj" ? "sample" : "dj"
+                                )
+                            }
+                        }
+                        .buttonStyle(DigKeyStyle())
+                        .amberFocus()
+
+                        Button("Delete") {
+                            Task { await model.crate.remove(id: track.id) }
+                        }
+                        .buttonStyle(DigKeyStyle())
                         .amberFocus()
 
                         if let path = track.alsPath, !path.isEmpty {

@@ -22,6 +22,10 @@ STATUS_READY = "ready"          # stems on disk
 STATUS_SCHEDULED = "scheduled"  # placed in a Live set
 STATUS_FAILED = "failed"
 
+KIND_SAMPLE = "sample"
+KIND_DJ = "dj"
+KINDS = (KIND_SAMPLE, KIND_DJ)
+
 
 def slugify(value: str, limit: int = 60) -> str:
     stem = Path(value).stem if Path(value).suffix else value
@@ -35,6 +39,7 @@ class CrateTrack:
     virtual_path: str = ""
     filename: str = ""
     size: int = 0
+    kind: str = KIND_SAMPLE
 
     id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
     local_path: str = ""
@@ -105,6 +110,22 @@ class Crate:
 
     def by_status(self, *statuses: str) -> list[CrateTrack]:
         return [track for track in self.tracks if track.status in statuses]
+
+    def by_kind(self, kind: str) -> list[CrateTrack]:
+        return [track for track in self.tracks if track.kind == kind]
+
+    def set_kind(self, track_id: str, kind: str) -> CrateTrack | None:
+        if kind not in KINDS:
+            raise ValueError(f"unknown crate kind: {kind}")
+
+        track = self.get(track_id)
+
+        if track is None:
+            return None
+
+        track.kind = kind
+        self.save()
+        return track
 
     def load(self) -> None:
         if not self.path or not self.path.is_file():

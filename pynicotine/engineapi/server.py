@@ -352,6 +352,10 @@ class Handler(BaseHTTPRequestHandler):
             from pynicotine.digging.actions import crate_for
 
             tracks = crate_for().tracks
+            kind = query.get("kind")
+
+            if kind:
+                tracks = [track for track in tracks if track.kind == kind]
 
             return self._reply(HTTPStatus.OK, {
                 "total": len(tracks),
@@ -483,6 +487,17 @@ class Handler(BaseHTTPRequestHandler):
             search_store().remove(token)
             return self._reply(HTTPStatus.OK, {"stopped": token})
 
+        if len(parts) == 2 and parts[0] == "crate":
+            from pynicotine.digging.actions import crate_for
+
+            crate = crate_for()
+
+            if crate.get(parts[1]) is None:
+                return self._error(HTTPStatus.NOT_FOUND, "unknown crate track")
+
+            self._invoke(lambda: crate.remove(parts[1]))
+            return self._reply(HTTPStatus.OK, {"removed": parts[1]})
+
         if len(parts) == 2 and parts[0] == "audition":
             session = audition_sessions().get(parts[1])
 
@@ -546,8 +561,29 @@ class Handler(BaseHTTPRequestHandler):
             if session is None:
                 return self._error(HTTPStatus.NOT_FOUND, "unknown audition")
 
-            track = self._invoke(session.keep)
+            from pynicotine.digging.crate import KINDS
+
+            payload = self._body()
+            kind = str(payload.get("kind") or "sample")
+
+            if kind not in KINDS:
+                return self._error(HTTPStatus.BAD_REQUEST, f"unknown crate kind: {kind}")
+
+            track = self._invoke(lambda: session.keep(kind))
             return self._reply(HTTPStatus.ACCEPTED, {"track": track, "audition": session.summary()})
+
+        if len(parts) == 3 and parts[0] == "crate" and parts[2] == "kind":
+            from pynicotine.digging.actions import crate_for
+
+            payload = self._body()
+            kind = str(payload.get("kind") or "")
+            crate = crate_for()
+
+            if crate.get(parts[1]) is None:
+                return self._error(HTTPStatus.NOT_FOUND, "unknown crate track")
+
+            track = self._invoke(lambda: crate.set_kind(parts[1], kind))
+            return self._reply(HTTPStatus.OK, {"track": crate_track_dict(track)})
 
         if len(parts) == 3 and parts[0] == "crate" and parts[2] == "separate":
             from pynicotine.digging.actions import crate_for

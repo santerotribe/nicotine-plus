@@ -34,8 +34,10 @@ NICOTINE_API_PORT=8766 NICOTINE_API_TOKEN=secret \
 | GET | `/users/<user>/files?folder=&offset=&limit=` | paged files of one folder |
 | POST | `/users/<user>/browse` | request the user's share list |
 | GET | `/downloads?offset=&limit=` | transfers with raw progress |
-| GET | `/crate` | kept tracks, stems, Live set paths |
+| GET | `/crate?kind=sample\|dj` | kept tracks, stems, Live set paths |
 | POST | `/crate/<id>/separate` | run the separation pipeline for a kept track |
+| POST | `/crate/<id>/kind` | move a track between the sample and DJ crates |
+| DELETE | `/crate/<id>` | remove a track from the crate |
 | GET | `/search` | searches tracked by this API |
 | POST | `/search` | start a search |
 | GET | `/search/<token>` | counters for one search |

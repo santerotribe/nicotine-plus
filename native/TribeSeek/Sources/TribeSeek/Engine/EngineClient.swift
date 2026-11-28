@@ -176,8 +176,23 @@ struct EngineClient {
         try await get("/downloads?limit=500")
     }
 
-    func crate() async throws -> CratePage {
-        try await get("/crate")
+    func crate(kind: String? = nil) async throws -> CratePage {
+        if let kind, let escaped = kind.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) {
+            return try await get("/crate?kind=\(escaped)")
+        }
+
+        return try await get("/crate")
+    }
+
+    func deleteCrateTrack(id: String) async throws {
+        struct Response: Decodable { let removed: String }
+        _ = try await delete("/crate/\(escape(id))", as: Response.self)
+    }
+
+    func setCrateKind(id: String, kind: String) async throws {
+        struct Body: Encodable { let kind: String }
+        struct Response: Decodable { let track: CrateTrack }
+        _ = try await post("/crate/\(escape(id))/kind", body: Body(kind: kind), as: Response.self)
     }
 
     // MARK: - Search
@@ -249,9 +264,11 @@ struct EngineClient {
         try await get("/audition/\(escape(id))")
     }
 
-    func keepAudition(id: String) async throws -> CrateTrack {
+    func keepAudition(id: String, kind: String = "sample") async throws -> CrateTrack {
+        struct Body: Encodable { let kind: String }
         struct Response: Decodable { let track: CrateTrack }
-        let response: Response = try await post("/audition/\(escape(id))/keep", as: Response.self)
+        let response: Response = try await post(
+            "/audition/\(escape(id))/keep", body: Body(kind: kind), as: Response.self)
         return response.track
     }
 

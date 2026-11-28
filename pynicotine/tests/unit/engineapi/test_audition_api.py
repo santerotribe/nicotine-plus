@@ -149,12 +149,13 @@ def test_keep_records_a_crate_track(monkeypatch):
 
     recorded = {}
 
-    def fake_keep(core, source, settings, peer=None):
+    def fake_keep(core, source, settings, peer=None, kind="sample"):
         recorded["source"] = source
         recorded["peer"] = peer
+        recorded["kind"] = kind
         return SimpleNamespace(id="track-1", username=source.username,
                                filename=source.filename, virtual_path=source.virtual_path,
-                               status="kept", bpm=None, local_path="", stems={},
+                               kind=kind, status="kept", bpm=None, local_path="", stems={},
                                als_path="", error="", added=time.time())
 
     def fake_source(**kwargs):
@@ -173,6 +174,7 @@ def test_keep_records_a_crate_track(monkeypatch):
     assert session.kept is True
     assert session.track_id == "track-1"
     assert recorded["source"].filename == "track.mp3"
+    assert recorded["kind"] == "sample"
     assert recorded["peer"] is session.peer
 
 

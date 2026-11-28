@@ -45,3 +45,35 @@ def test_slugify():
 
     assert slugify("A Tribe Called Quest - 1nce Again.mp3") == "a-tribe-called-quest-1nce-again"
     assert slugify("...") == "track"
+
+
+def test_crate_kinds_and_move(tmp_path):
+
+    crate = Crate(tmp_path / "crate.json")
+    sample = crate.add(CrateTrack(username="dj", virtual_path="Music/a.flac"))
+    dj = crate.add(CrateTrack(username="dj", virtual_path="Music/b.flac", kind="dj"))
+
+    assert [track.id for track in crate.by_kind("sample")] == [sample.id]
+    assert [track.id for track in crate.by_kind("dj")] == [dj.id]
+
+    moved = crate.set_kind(sample.id, "dj")
+
+    assert moved is not None
+    assert moved.kind == "dj"
+    assert crate.by_kind("sample") == []
+    assert {track.id for track in crate.by_kind("dj")} == {sample.id, dj.id}
+
+
+def test_crate_kind_is_validated(tmp_path):
+
+    crate = Crate(tmp_path / "crate.json")
+    track = crate.add(CrateTrack(username="dj", virtual_path="Music/a.flac"))
+
+    try:
+        crate.set_kind(track.id, "mixtape")
+    except ValueError as error:
+        assert "unknown crate kind" in str(error)
+    else:
+        raise AssertionError("an unknown kind must be rejected")
+
+    assert crate.set_kind("missing", "dj") is None

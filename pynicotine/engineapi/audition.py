@@ -325,7 +325,7 @@ class AuditionSession:
 
     # -- keeping ----------------------------------------------------------
 
-    def keep(self) -> dict:
+    def keep(self, kind: str = "sample") -> dict:
         """Keep the file: crate entry now, download promoted when it finishes."""
 
         from pynicotine.core import core
@@ -345,6 +345,7 @@ class AuditionSession:
             ),
             settings,
             peer=self.peer,
+            kind=kind,
         )
 
         self.kept = True

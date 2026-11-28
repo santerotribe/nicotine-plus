@@ -343,13 +343,23 @@ final class SearchModel: Identifiable {
 final class CrateModel {
 
     var client: EngineClient?
-    var tracks: [CrateTrack] = []
+    var kind = "sample"
+    var allTracks: [CrateTrack] = []
     var selectedID: String?
     var error = ""
     var isLoading = false
 
+    var tracks: [CrateTrack] {
+        allTracks.filter { $0.kind == kind }
+    }
+
     var selected: CrateTrack? {
         tracks.first { $0.id == selectedID }
+    }
+
+    func select(kind: String) {
+        self.kind = kind
+        selectedID = tracks.first?.id
     }
 
     func load() async {
@@ -360,9 +370,9 @@ final class CrateModel {
 
         do {
             let page = try await client.crate()
-            tracks = page.tracks
+            allTracks = page.tracks
 
-            if selectedID == nil {
+            if selectedID == nil || !tracks.contains(where: { $0.id == selectedID }) {
                 selectedID = tracks.first?.id
             }
 
@@ -376,6 +386,18 @@ final class CrateModel {
     func separate(id: String) async {
         guard let client else { return }
         try? await client.separateCrateTrack(id: id)
+        await load()
+    }
+
+    func remove(id: String) async {
+        guard let client else { return }
+        try? await client.deleteCrateTrack(id: id)
+        await load()
+    }
+
+    func move(id: String, to kind: String) async {
+        guard let client else { return }
+        try? await client.setCrateKind(id: id, kind: kind)
         await load()
     }
 }

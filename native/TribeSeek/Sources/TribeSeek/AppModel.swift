@@ -121,6 +121,11 @@ final class AppModel {
             browse.binGrid = true
         }
 
+        if let raw = ProcessInfo.processInfo.environment["TRIBE_SECTION"],
+           let target = Section(rawValue: raw) {
+            section = target
+        }
+
         // A development aid: open a shelf at one folder, for the dig path.
         if let raw = ProcessInfo.processInfo.environment["TRIBE_DIG"],
            let split = raw.firstIndex(of: "|") {

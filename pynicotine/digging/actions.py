@@ -47,7 +47,7 @@ def crate_for(settings: DiggingSettings | None = None) -> Crate:
 
 
 def keep_source(core, source: TrackSource, settings: DiggingSettings | None = None,
-                peer=None) -> CrateTrack:
+                peer=None, kind: str = "sample") -> CrateTrack:
     """Add a browsed file to the crate and make sure the real file is kept."""
 
     settings = settings or DiggingSettings.load()
@@ -59,6 +59,7 @@ def keep_source(core, source: TrackSource, settings: DiggingSettings | None = No
         virtual_path=source.virtual_path,
         filename=source.filename,
         size=source.size,
+        kind=kind,
     ))
     track.status = STATUS_KEPT
     crate.save()
