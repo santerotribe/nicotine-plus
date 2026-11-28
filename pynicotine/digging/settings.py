@@ -120,6 +120,35 @@ def apply_settings(settings: "DiggingSettings", payload: dict) -> "DiggingSettin
         if key == "member_name" and not value.strip():
             raise ValueError("member_name cannot be empty")
 
+        if key in ("work_dir", "output_dir", "rolodex_path", "export_dir",
+                   "observatory_root", "live_app"):
+            if not value:
+                if key != "export_dir":
+                    raise ValueError(f"{key} cannot be empty")
+
+                setattr(settings, key, "")
+                continue
+
+            expanded = Path(value).expanduser()
+
+            if not expanded.is_absolute():
+                raise ValueError(f"{key} must be an absolute path")
+
+            if key in ("work_dir", "output_dir", "export_dir", "rolodex_path"):
+                target = expanded.parent if key == "rolodex_path" else expanded
+
+                try:
+                    target.mkdir(parents=True, exist_ok=True)
+                    probe = target / ".tribe-write-test"
+                    probe.write_text("", encoding="utf-8")
+                    probe.unlink()
+
+                except OSError as error:
+                    raise ValueError(f"{key} is not writable: {error}") from error
+
+            setattr(settings, key, str(expanded))
+            continue
+
         setattr(settings, key, value)
 
     return settings
@@ -320,5 +349,7 @@ class DiggingSettings:
         with tmp.open("w", encoding="utf-8") as handle:
             json.dump(payload, handle, indent=2, sort_keys=True)
 
+        os.chmod(tmp, 0o600)  # tokens live in this file
         tmp.replace(target)
+        os.chmod(target, 0o600)
         return target

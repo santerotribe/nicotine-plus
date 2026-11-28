@@ -91,7 +91,6 @@ struct Transport: View {
             .frame(height: Theme.transportHeight)
             .background(Material.chrome)
             .overlay(alignment: .top) { PanelRim() }
-            .id(timeline.date.timeIntervalSince1970)
         }
     }
 
@@ -147,7 +146,7 @@ struct Transport: View {
     private var dragHandle: some View {
 
         ZStack {
-            if let url = model.player.localFileURL {
+            if let url = draggableURL {
                 DragOutHandle(fileURL: url)
             }
 
@@ -163,9 +162,18 @@ struct Transport: View {
                 RoundedRectangle(cornerRadius: Theme.radiusPad)))
         }
         .frame(width: 84, height: Theme.instrumentKeyHeight)
-        .help(model.player.localFileURL == nil
+        .help(draggableURL == nil
               ? "The audio is not on disk yet"
               : "Drag into Ableton or Finder")
+    }
+
+    /// A preview still being written is an INCOMPLETE file; never hand it to
+    /// Ableton or Finder as if it were the track.
+    private var draggableURL: URL? {
+        guard let url = model.player.localFileURL,
+              !url.lastPathComponent.hasPrefix("INCOMPLETE") else { return nil }
+
+        return url
     }
 
     private var closeKey: some View {

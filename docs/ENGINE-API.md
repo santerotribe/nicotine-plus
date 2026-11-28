@@ -41,6 +41,7 @@ NICOTINE_API_PORT=8766 NICOTINE_API_TOKEN=secret \
 | GET | `/rolodex` | the collective ledger: entries, path, member |
 | POST | `/rolodex/star` | star or unstar a peer in the ledger |
 | GET | `/crate?kind=sample\|dj` | kept tracks, stems, Live set paths |
+| POST | `/crate/keep` | keep a list of files into a crate kind |
 | POST | `/crate/<id>/separate` | run the separation pipeline for a kept track |
 | POST | `/crate/<id>/kind` | move a track between the sample and DJ crates |
 | DELETE | `/crate/<id>` | remove a track from the crate |

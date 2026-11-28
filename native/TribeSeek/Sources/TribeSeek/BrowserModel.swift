@@ -26,6 +26,7 @@ final class BrowserModel {
         let audioFormats: [String: Int]
         let lossless: Int
         let seconds: Int
+        let digest: String
 
         var id: String { name }
 
@@ -160,7 +161,10 @@ final class BrowserModel {
             return base.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
 
         case .files:
-            return base.sorted { $0.count > $1.count }
+            return base.sorted {
+                if $0.count != $1.count { return $0.count > $1.count }
+                return $0.name.localizedStandardCompare($1.name) == .orderedAscending
+            }
 
         case .promising:
             return base.sorted {
@@ -176,7 +180,8 @@ final class BrowserModel {
 
                 if leftFresh != rightFresh { return leftFresh }
                 if $0.losslessRatio != $1.losslessRatio { return $0.losslessRatio > $1.losslessRatio }
-                return $0.count > $1.count
+                if $0.count != $1.count { return $0.count > $1.count }
+                return $0.name.localizedStandardCompare($1.name) == .orderedAscending
             }
         }
     }
@@ -184,6 +189,7 @@ final class BrowserModel {
     private struct SeenSnapshot: Codable {
         var counts: [String: Int]
         var sizes: [String: Int64]
+        var digests: [String: String]?
         var updated: Double
     }
 
@@ -201,6 +207,10 @@ final class BrowserModel {
         }
 
         fresh = Set(folders.filter { folder in
+            if let previous = snapshot.digests?[folder.name] {
+                return previous != folder.digest
+            }
+
             guard let count = snapshot.counts[folder.name] else { return true }
 
             if folder.count > count {
@@ -234,19 +244,25 @@ final class BrowserModel {
     /// Called when the shelf is left, the peer changes, or the app quits.
     func commitSeen() {
 
-        guard let user = selectedUser, !folders.isEmpty else { return }
+        // Never advance the baseline from a partial or still-loading share.
+        guard let user = selectedUser, !isBrowsing,
+              let loaded = summary, loaded.folders > 0,
+              folders.count >= loaded.folders else { return }
 
         var counts: [String: Int] = [:]
         var sizes: [String: Int64] = [:]
+        var digests: [String: String] = [:]
 
         for folder in folders {
             counts[folder.name] = folder.count
             sizes[folder.name] = folder.size
+            digests[folder.name] = folder.digest
         }
 
         let snapshot = SeenSnapshot(
             counts: counts,
             sizes: sizes,
+            digests: digests,
             updated: Date().timeIntervalSince1970
         )
 
@@ -292,7 +308,7 @@ final class BrowserModel {
         }
     }
 
-    func browse(user: String) async {
+    func browse(user: String, force: Bool = false) async {
 
         guard let client else { return }
 
@@ -305,7 +321,7 @@ final class BrowserModel {
 
         // The engine already holds this share: use it instead of asking the
         // peer again, which would blank the shelf while the answer is rebuilt.
-        if let cached = try? await client.summary(user: user), cached.folders > 0 {
+        if !force, let cached = try? await client.summary(user: user), cached.folders > 0 {
             summary = cached
             isBrowsing = false
             await loadFolders(user: user)
@@ -389,7 +405,8 @@ final class BrowserModel {
                         audioFiles: $0.audioFiles,
                         audioFormats: $0.audioFormats,
                         lossless: $0.lossless,
-                        seconds: Int($0.duration)
+                        seconds: Int($0.duration),
+                        digest: $0.digest
                     )
                 })
 
@@ -397,6 +414,8 @@ final class BrowserModel {
 
             if offset >= page.total || page.folders.isEmpty { break }
         }
+
+        guard selectedUser == user else { return }
 
         folders = collected
         noteFresh(user: user)
@@ -426,6 +445,9 @@ final class BrowserModel {
             return
         }
 
+        // A slow response for folder A must not land after the user moved to B.
+        guard selectedUser == user, selectedFolder == folder else { return }
+
         files = page.files
         fileTotal = page.total
     }
@@ -437,16 +459,16 @@ final class BrowserModel {
         guard !folder.isEmpty else { return }
 
         if folders.contains(where: { $0.name == folder }) {
-            await loadFiles(folder: folder)
             scrollToSelection = true
+            await loadFiles(folder: folder)
             return
         }
 
         if let match = folders.first(where: {
             $0.name.localizedCaseInsensitiveCompare(folder) == .orderedSame
         }) {
-            await loadFiles(folder: match.name)
             scrollToSelection = true
+            await loadFiles(folder: match.name)
             return
         }
 

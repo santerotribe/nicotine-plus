@@ -414,7 +414,11 @@ struct EngineClient {
     }
 
     private func escape(_ value: String) -> String {
-        value.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? value
+        // Query values too: "&" splits the query and "+" decodes as a space.
+        var allowed = CharacterSet.alphanumerics
+        allowed.insert(charactersIn: "-._~")
+
+        return value.addingPercentEncoding(withAllowedCharacters: allowed) ?? value
     }
 }
 

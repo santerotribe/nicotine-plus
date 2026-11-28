@@ -78,9 +78,10 @@ struct FolderInfo: Decodable {
     let audioFormats: [String: Int]
     let lossless: Int
     let duration: Double
+    let digest: String
 
     enum CodingKeys: String, CodingKey {
-        case name, files, size, lossless, duration
+        case name, files, size, lossless, duration, digest
         case audioFiles = "audio_files"
         case audioFormats = "audio_formats"
     }

@@ -33,7 +33,10 @@ final class RolodexModel {
         var folderCount: Int { folders.count }
 
         var topFolder: String? {
-            folders.max { $0.value < $1.value }?.key
+            folders.max { left, right in
+                if left.value != right.value { return left.value < right.value }
+                return left.key > right.key  // deterministic on ties
+            }?.key
         }
 
         var topFolderName: String? {
@@ -92,7 +95,7 @@ final class RolodexModel {
 
     func load() async {
 
-        guard let client else { return }
+        guard let client, !isLoading else { return }
 
         isLoading = true
 
@@ -127,7 +130,7 @@ final class RolodexModel {
 
         guard let client else { return }
 
-        let names = Array(sources.prefix(120).map(\.username))
+        let names = Array(sources.prefix(40).map(\.username))
 
         guard !names.isEmpty else { return }
 
@@ -211,13 +214,13 @@ final class RolodexModel {
 
             var source = map[entry.peer] ?? Source(username: entry.peer)
 
-            source.crew += 1
-
             if !entry.folder.isEmpty {
                 source.folders[entry.folder, default: 0] += 1
             }
 
-            if !entry.foundBy.isEmpty {
+            // "Crew" means someone else: your own keeps are already counted.
+            if !entry.foundBy.isEmpty, entry.foundBy != member {
+                source.crew += 1
                 source.foundBy.insert(entry.foundBy)
             }
 

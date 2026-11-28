@@ -305,6 +305,11 @@ final class AppModel {
                 tab.noteArrival(total: arrival.total)
             }
 
+        case "gap":
+            // The event stream missed messages; re-read what the UI shows.
+            await refreshState()
+            await crate.load()
+
         case "search_removed":
             struct Removed: Decodable { let token: Int }
             if let removed = event.decode(Removed.self),
@@ -397,6 +402,7 @@ final class AppModel {
 
         guard client != nil else { return }
 
+        browse.users.removeAll { $0 == user }
         browse.users.insert(user, at: 0)
         browse.selectedUser = user
         section = .shelf
@@ -582,10 +588,28 @@ final class AppModel {
     /// End the server-side session too, so the preview transfer is paused and
     /// the cache sweep can clean the file up.
     @discardableResult
-    func keepBin(user: String, folder: String, files: [SharedFileRow],
-                 kind: String = "sample") async -> Int {
+    func keepBin(user: String, folder: String, kind: String = "sample") async -> Int {
 
-        guard let client, !files.isEmpty else { return 0 }
+        guard let client else { return 0 }
+        guard browse.selectedUser == user, browse.selectedFolder == folder else { return 0 }
+
+        // The file list is paged; keeping only the first page would silently
+        // drop the rest of a big bin.
+        while browse.files.count < browse.fileTotal {
+            let before = browse.files.count
+            await browse.loadMoreFiles()
+
+            if browse.files.count == before {
+                break
+            }
+        }
+
+        let extensions: Set<String> = ["mp3", "flac", "wav", "aif", "aiff", "m4a", "ogg", "opus"]
+        let files = browse.files.filter {
+            extensions.contains(($0.name as NSString).pathExtension.lowercased())
+        }
+
+        guard !files.isEmpty else { return 0 }
 
         do {
             let count = try await client.keepBin(user: user, folder: folder,

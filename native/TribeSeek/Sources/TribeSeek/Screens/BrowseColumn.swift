@@ -59,7 +59,7 @@ struct BrowseColumn: View {
                             InstrumentLabel(text: "NO PEER MATCHES")
                         }
 
-                        Text("“(model.browse.filter)” filters the peer list, not the network.")
+                        Text("“\(model.browse.filter)” filters the peer list, not the network.")
                             .font(Theme.sans(11))
                             .foregroundStyle(Theme.textMuted)
                             .multilineTextAlignment(.center)

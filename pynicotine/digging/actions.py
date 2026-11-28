@@ -146,6 +146,12 @@ def keep_source(core, source: TrackSource, settings: DiggingSettings | None = No
         file_attributes=source.attributes,
     )
 
+    # An API-only session never visits the GTK page that starts the service;
+    # without this, "separating when the download lands" is a lie there.
+    from pynicotine.digging.service import start_service
+
+    start_service()
+
     return track
 
 

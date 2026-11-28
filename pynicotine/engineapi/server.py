@@ -74,6 +74,10 @@ _SERVER: ThreadingHTTPServer | None = None
 _TOKEN = ""
 
 
+class BusyError(Exception):
+    """The engine thread did not pick the mutation up in time."""
+
+
 def _core():
     from pynicotine.core import core
 
@@ -103,7 +107,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def _authorized(self, query: dict | None = None) -> bool:
         if not _TOKEN:
-            return True
+            # Fail closed: an API with no token is an unauthenticated API.
+            return False
 
         if self.headers.get("Authorization") == f"Bearer {_TOKEN}":
             return True
@@ -181,7 +186,7 @@ class Handler(BaseHTTPRequestHandler):
         events.invoke_main_thread(runner)
 
         if not done.wait(timeout):
-            raise TimeoutError("the engine did not answer in time")
+            raise BusyError("the engine is busy; the request may or may not apply")
 
         error = box.get("error")
 
@@ -477,6 +482,9 @@ class Handler(BaseHTTPRequestHandler):
         try:
             return self._route_post(parts)
 
+        except BusyError as error:
+            return self._error(HTTPStatus.SERVICE_UNAVAILABLE, str(error))
+
         except ValueError as error:
             return self._error(HTTPStatus.BAD_REQUEST, str(error))
 
@@ -492,6 +500,9 @@ class Handler(BaseHTTPRequestHandler):
 
         try:
             return self._route_delete(parts)
+
+        except BusyError as error:
+            return self._error(HTTPStatus.SERVICE_UNAVAILABLE, str(error))
 
         except ValueError as error:
             return self._error(HTTPStatus.BAD_REQUEST, str(error))

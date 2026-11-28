@@ -56,3 +56,39 @@ def test_apply_settings_rejects_bad_values(payload):
 
     with pytest.raises(ValueError):
         apply_settings(DiggingSettings(), payload)
+
+
+def test_apply_settings_normalises_and_creates_paths(tmp_path):
+
+    target = tmp_path / "work"
+    settings = DiggingSettings()
+
+    apply_settings(settings, {"work_dir": str(target)})
+
+    assert settings.work_dir == str(target)
+    assert target.is_dir()
+
+
+def test_apply_settings_rejects_relative_paths():
+
+    with pytest.raises(ValueError):
+        apply_settings(DiggingSettings(), {"work_dir": "relative/work"})
+
+
+def test_apply_settings_rejects_unwritable_paths(tmp_path):
+
+    blocker = tmp_path / "file"
+    blocker.write_text("x")
+
+    with pytest.raises(ValueError):
+        apply_settings(DiggingSettings(), {"work_dir": str(blocker / "work")})
+
+
+def test_saved_settings_are_private(tmp_path):
+
+    path = tmp_path / "digging.json"
+    settings = DiggingSettings()
+    settings.mvsep_token = "secret"
+    settings.save(path)
+
+    assert (path.stat().st_mode & 0o777) == 0o600

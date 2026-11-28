@@ -96,11 +96,9 @@ struct CrateRowView: View {
                 Spacer(minLength: 6)
 
                 HStack(spacing: 3) {
-                    ForEach(0..<4, id: \.self) { index in
-                        let stems = sortedStems
-
-                        LED(isOn: index < stems.count,
-                            color: index < stems.count ? Theme.statusSaved : Color(hex: 0x2F3335),
+                    ForEach(0..<max(sortedStems.count, 1), id: \.self) { index in
+                        LED(isOn: index < sortedStems.count,
+                            color: index < sortedStems.count ? Theme.statusSaved : Color(hex: 0x2F3335),
                             size: 3.5)
                     }
                 }

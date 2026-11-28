@@ -25,7 +25,8 @@ final class TribeSeekTests: XCTestCase {
             audioFiles: 25,
             audioFormats: ["flac": 25],
             lossless: 25,
-            seconds: 3_600
+            seconds: 3_600,
+            digest: "a"
         )
 
         XCTAssertTrue(bin.isGeneric)
@@ -40,7 +41,8 @@ final class TribeSeekTests: XCTestCase {
             audioFiles: 8,
             audioFormats: ["flac": 8],
             lossless: 8,
-            seconds: 100
+            seconds: 100,
+            digest: "b"
         )
 
         XCTAssertFalse(album.isGeneric)

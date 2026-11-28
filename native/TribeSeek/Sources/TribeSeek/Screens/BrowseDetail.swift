@@ -96,7 +96,7 @@ struct BrowseDetail: View {
             }
 
             Button("Refresh") {
-                Task { await model.browse.browse(user: user) }
+                Task { await model.browse.browse(user: user, force: true) }
             }
             .buttonStyle(DigKeyStyle(dense: true))
             .amberFocus()
@@ -256,8 +256,7 @@ struct BrowseDetail: View {
 
                         Button("Keep all") {
                             Task {
-                                await model.keepBin(user: user, folder: name,
-                                                    files: playableFiles)
+                                await model.keepBin(user: user, folder: name)
                             }
                         }
                         .buttonStyle(DigKeyStyle(dense: true))

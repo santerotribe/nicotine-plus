@@ -12,6 +12,8 @@ member's own working set; this file is the memory of the group.
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 import time
 
 from pathlib import Path
@@ -24,7 +26,7 @@ def default_path() -> Path:
 class Ledger:
 
     def __init__(self, path: str | Path | None, member: str) -> None:
-        self.path = Path(path) if path else default_path()
+        self.path = Path(path).expanduser() if path else default_path()
         self.member = member or "unknown"
         self.entries: dict[tuple[str, str], dict] = {}
         self.load()
@@ -97,9 +99,21 @@ class Ledger:
         self.path.parent.mkdir(parents=True, exist_ok=True)
 
         payload = {"version": 1, "entries": list(self.entries.values())}
-        temporary = self.path.with_suffix(".json.tmp")
-        temporary.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-        temporary.replace(self.path)
+
+        descriptor, temporary = tempfile.mkstemp(
+            dir=self.path.parent, prefix=".rolodex-", suffix=".json.tmp")
+
+        try:
+            with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+                json.dump(payload, handle, indent=2)
+                handle.flush()
+                os.fsync(handle.fileno())
+
+            os.replace(temporary, self.path)
+
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
 
     def as_list(self) -> list[dict]:
         return sorted(

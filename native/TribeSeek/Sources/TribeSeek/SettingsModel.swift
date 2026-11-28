@@ -41,7 +41,7 @@ final class SettingsModel {
 
     func load() async {
 
-        guard let client else { return }
+        guard let client, !isLoading else { return }
 
         isLoading = true
 
@@ -90,6 +90,22 @@ final class SettingsModel {
         }
 
         isSaving = false
+    }
+
+    func clearToken(_ field: String) async {
+
+        guard let client else { return }
+
+        let patch = field == "mvsep"
+            ? SettingsPatch(mvsepToken: "")
+            : SettingsPatch(pcToken: "")
+
+        do {
+            adopt(try await client.updateSettings(patch))
+            note = "Token cleared"
+        } catch {
+            self.error = error.localizedDescription
+        }
     }
 
     private func adopt(_ payload: SettingsPayload) {

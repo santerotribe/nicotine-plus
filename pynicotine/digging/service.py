@@ -153,12 +153,15 @@ class PipelineService:
             self._set_status(track.id, status=STATUS_SEPARATING)
             log.add(f"Digging: separating {path.name} ({self.settings.renderer})")
 
+            # Reload: a Rig change after the service started must apply.
+            settings = DiggingSettings.load()
+
             separated = pipeline.separate(
-                path, self.settings,
+                path, settings,
                 progress=lambda message, fraction: log.add_debug(f"Digging: {message} ({fraction:.0%})"),
             )
             built = pipeline.build_set(
-                separated, self.settings,
+                separated, settings,
                 name=f"{path.stem}",
                 open_after=None,
             )

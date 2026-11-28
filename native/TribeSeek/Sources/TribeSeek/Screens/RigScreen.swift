@@ -28,7 +28,6 @@ struct RigScreen: View {
             }
         }
         .background(Theme.bgWorkspace)
-        .task { await settings.load() }
     }
 
     private var header: some View {
@@ -116,10 +115,20 @@ struct RigScreen: View {
             }
 
             if settings.renderer == "mvsep" {
-                RigField(label: "MVSEP token",
-                         text: $settings.mvsepToken,
-                         secure: true,
-                         placeholder: settings.mvsepTokenSet ? "•••••• set" : "paste token")
+                HStack(alignment: .bottom, spacing: 6) {
+                    RigField(label: "MVSEP token",
+                             text: $settings.mvsepToken,
+                             secure: true,
+                             placeholder: settings.mvsepTokenSet ? "•••••• set" : "paste token")
+
+                    if settings.mvsepTokenSet {
+                        Button("Clear") {
+                            Task { await settings.clearToken("mvsep") }
+                        }
+                        .buttonStyle(DigKeyStyle(dense: true))
+                        .help("Remove the stored MVSEP token")
+                    }
+                }
 
                 RigField(label: "Separation type", text: $settings.mvsepSepType,
                          placeholder: "render id")
@@ -129,9 +138,19 @@ struct RigScreen: View {
                 RigField(label: "Studio PC URL", text: $settings.pcURL,
                          placeholder: "http://studio:8765")
 
-                RigField(label: "Studio PC token", text: $settings.pcToken,
-                         secure: true,
-                         placeholder: settings.pcTokenSet ? "•••••• set" : "token")
+                HStack(alignment: .bottom, spacing: 6) {
+                    RigField(label: "Studio PC token", text: $settings.pcToken,
+                             secure: true,
+                             placeholder: settings.pcTokenSet ? "•••••• set" : "token")
+
+                    if settings.pcTokenSet {
+                        Button("Clear") {
+                            Task { await settings.clearToken("pc") }
+                        }
+                        .buttonStyle(DigKeyStyle(dense: true))
+                        .help("Remove the stored studio token")
+                    }
+                }
             }
 
             HStack(spacing: 4) {

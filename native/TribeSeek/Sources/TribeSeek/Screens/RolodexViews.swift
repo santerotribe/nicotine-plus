@@ -37,7 +37,6 @@ struct RolodexScreen: View {
             }
         }
         .background(Theme.bgWorkspace)
-        .task { await model.rolodex.load() }
     }
 
     private var header: some View {

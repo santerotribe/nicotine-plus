@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import time
@@ -65,16 +66,21 @@ def _folder_info(folder: str, files: list[SharedFile]) -> dict:
     audio_files = 0
     lossless = 0
     formats: Counter[str] = Counter()
+    fingerprint: list[str] = []
 
     for file in files:
-        size += file.size or 0
+        try:
+            size += int(file.size or 0)
+        except (TypeError, ValueError):
+            pass
 
-        name = file.path.rsplit("\\", 1)[-1]
+        name = str(getattr(file, "path", "") or "").rsplit("\\", 1)[-1]
         extension = name.rsplit(".", 1)[-1].lower() if "." in name else ""
 
         if extension in _AUDIO_FORMATS:
             audio_files += 1
             formats[extension] += 1
+            fingerprint.append(f"{name}\t{getattr(file, 'size', 0) or 0}")
 
             if extension in _LOSSLESS_FORMATS:
                 lossless += 1
@@ -82,7 +88,12 @@ def _folder_info(folder: str, files: list[SharedFile]) -> dict:
             attributes = getattr(file, "attributes", None)
             length = getattr(attributes, "length", None) if attributes else None
 
-            if length and length > 0:
+            try:
+                length = int(length or 0)
+            except (TypeError, ValueError):
+                length = 0
+
+            if length > 0:
                 duration += length
 
     return {
@@ -93,7 +104,27 @@ def _folder_info(folder: str, files: list[SharedFile]) -> dict:
         "audio_formats": dict(formats.most_common(4)),
         "lossless": lossless,
         "duration": int(duration),
+        # Names + sizes of the audio only: catches a swap that keeps the count.
+        "digest": hashlib.sha1(
+            "\n".join(sorted(fingerprint)).encode("utf-8", "replace")
+        ).hexdigest()[:16],
     }
+
+
+def _all_folder_names(browsed_user: "BrowsedUser") -> list[str]:
+    """Public and private shares at once: a peer can have both."""
+
+    return list(dict.fromkeys([
+        *browsed_user.public_folders,
+        *browsed_user.private_folders,
+    ]))
+
+
+def _folder_files(browsed_user: "BrowsedUser", folder: str) -> list[SharedFile]:
+    return [
+        *(browsed_user.public_folders.get(folder) or []),
+        *(browsed_user.private_folders.get(folder) or []),
+    ]
 
 
 @dataclass(slots=True, eq=False)
@@ -222,12 +253,13 @@ class UserBrowse:
         if browsed_user is None:
             return None
 
-        folders = list(browsed_user.public_folders) or list(browsed_user.private_folders)
+        folders = _all_folder_names(browsed_user)
+        files = sum(len(_folder_files(browsed_user, folder)) for folder in folders)
 
         return {
             "username": username,
-            "folders": browsed_user.num_folders if browsed_user.num_folders is not None else len(folders),
-            "files": browsed_user.num_files or 0,
+            "folders": len(folders) if folders else (browsed_user.num_folders or 0),
+            "files": files if folders else (browsed_user.num_files or 0),
             "shared_size": browsed_user.shared_size or 0,
             "messages": self._browse_timing.get(username, {}).get("messages", 0),
         }
@@ -245,20 +277,22 @@ class UserBrowse:
         if browsed_user is None:
             return None
 
-        folders = list(browsed_user.public_folders) or list(browsed_user.private_folders)
+        # One snapshot for the whole page: a browse that clears or appends while
+        # this runs must not yield an old total with zeroed rows.
+        snapshot: dict[str, list] = {}
+
+        for folder, files in chain(
+            browsed_user.public_folders.items(),
+            browsed_user.private_folders.items(),
+        ):
+            snapshot.setdefault(folder, []).extend(files)
+
+        folders = list(snapshot)
         total = len(folders)
         offset = max(0, int(offset))
         limit = max(1, int(limit))
         page = folders[offset:offset + limit]
-        details = [
-            _folder_info(
-                folder,
-                browsed_user.public_folders.get(folder)
-                or browsed_user.private_folders.get(folder)
-                or [],
-            )
-            for folder in page
-        ]
+        details = [_folder_info(folder, snapshot.get(folder, [])) for folder in page]
 
         return {"username": username, "total": total, "offset": offset,
                 "limit": limit, "folders": details}
@@ -272,11 +306,7 @@ class UserBrowse:
         if browsed_user is None:
             return None
 
-        files = (
-            browsed_user.public_folders.get(folder_path)
-            or browsed_user.private_folders.get(folder_path)
-            or []
-        )
+        files = _folder_files(browsed_user, folder_path)
         offset = max(0, int(offset))
         limit = max(1, int(limit))
 

@@ -11,7 +11,7 @@ struct AuditionDeck: View {
 
     @Bindable var model: AppModel
 
-    static let expandedHeight: CGFloat = 154
+    static let expandedHeight: CGFloat = 144
 
     var body: some View {
         if model.trayExpanded, model.audition.state != nil {
@@ -164,7 +164,7 @@ private struct RibbonDeck: View {
     private var dragKey: some View {
 
         ZStack {
-            if let url = model.player.localFileURL {
+            if let url = draggableURL {
                 DragOutHandle(fileURL: url)
             }
 
@@ -175,9 +175,16 @@ private struct RibbonDeck: View {
         }
         .frame(width: 30, height: 30)
         .background(CapSurface(radius: Theme.radiusPad))
-        .help(model.player.localFileURL == nil
+        .help(draggableURL == nil
               ? "The audio is not on disk yet"
               : "Drag into Ableton or Finder")
+    }
+
+    private var draggableURL: URL? {
+        guard let url = model.player.localFileURL,
+              !url.lastPathComponent.hasPrefix("INCOMPLETE") else { return nil }
+
+        return url
     }
 
     private var collapseKey: some View {
@@ -270,7 +277,6 @@ private struct RibbonDeck: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .disabled(model.audition.stems.isEmpty)
                 .popover(isPresented: $showStems, arrowEdge: .bottom) {
                     StemsPopover(model: model)
                 }
@@ -436,7 +442,7 @@ private struct RibbonDeck: View {
 
     private func artistLine(_ state: AuditionState) -> String {
 
-        if let match = state.catalogue.first {
+        if let match = state.catalogue.first, match.score >= 0.55 {
             return "\(match.artist) — \(match.title)"
         }
 
@@ -444,6 +450,10 @@ private struct RibbonDeck: View {
     }
 
     private func bitrateLabel(_ state: AuditionState) -> String? {
+
+        if state.filename.lowercased().hasSuffix(".flac") {
+            return "FLAC"
+        }
 
         guard state.duration > 0, state.size > 0 else { return nil }
 
