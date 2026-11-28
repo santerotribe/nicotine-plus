@@ -49,6 +49,31 @@ final class TribeSeekTests: XCTestCase {
     }
 
     @MainActor
+    func testRolodexGroupsKeepsBySource() {
+        let model = RolodexModel()
+        model.tracks = [
+            CrateTrack(id: "1", username: "peerA", filename: "a",
+                       virtualPath: "Music\\A\\a.flac", kind: "dj", addedAt: 100),
+            CrateTrack(id: "2", username: "peerA", filename: "b",
+                       virtualPath: "Music\\A\\b.flac", addedAt: 200),
+            CrateTrack(id: "3", username: "peerB", filename: "c",
+                       virtualPath: "Music\\B\\c.flac", addedAt: 300),
+        ]
+
+        let sources = model.sources
+
+        XCTAssertEqual(sources.count, 2)
+        XCTAssertEqual(sources.first?.username, "peerB")
+
+        let peerA = sources.first { $0.username == "peerA" }
+
+        XCTAssertEqual(peerA?.keeps, 2)
+        XCTAssertEqual(peerA?.dj, 1)
+        XCTAssertEqual(peerA?.sample, 1)
+        XCTAssertEqual(peerA?.topFolder, "Music\\A")
+    }
+
+    @MainActor
     func testSearchTabKnowsWhenItIsUnused() {
         let tab = SearchModel()
 

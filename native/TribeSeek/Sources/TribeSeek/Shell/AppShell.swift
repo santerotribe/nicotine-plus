@@ -23,6 +23,9 @@ struct AppShell: View {
                 } else if model.section == .shelf {
                     BrowseDetail(model: model)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if model.section == .rolodex {
+                    RolodexScreen(model: model)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                 HStack(spacing: 0) {
                     Group {

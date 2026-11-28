@@ -61,6 +61,7 @@ final class AppModel {
     /// a new query opens a tab instead of overwriting the one being read.
     var searchDraft = ""
     var crate = CrateModel()
+    var rolodex = RolodexModel()
 
     private var eventTask: Task<Void, Never>?
     private var stemTask: Task<Void, Never>?
@@ -93,6 +94,7 @@ final class AppModel {
         browse.client = client
         audition.client = client
         crate.client = client
+        rolodex.client = client
         for tab in searchTabs {
             tab.client = client
         }
@@ -214,6 +216,10 @@ final class AppModel {
     func activateSection() async {
         if section == .crates {
             await crate.load()
+        }
+
+        if section == .rolodex {
+            await rolodex.load()
         }
     }
 

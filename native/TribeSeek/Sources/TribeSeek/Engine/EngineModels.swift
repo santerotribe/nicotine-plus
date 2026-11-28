@@ -148,6 +148,7 @@ struct CrateTrack: Decodable, Identifiable {
     let kind: String
     let status: String
     let bpm: Double?
+    let addedAt: Double?
     let localPath: String?
     let alsPath: String?
     let error: String?
@@ -155,6 +156,7 @@ struct CrateTrack: Decodable, Identifiable {
 
     enum CodingKeys: String, CodingKey {
         case id, username, filename, kind, status, bpm, error, stems
+        case addedAt = "added_at"
         case virtualPath = "virtual_path"
         case localPath = "local_path"
         case alsPath = "als_path"
@@ -173,6 +175,25 @@ struct CrateTrack: Decodable, Identifiable {
         alsPath = try container.decodeIfPresent(String.self, forKey: .alsPath)
         error = try container.decodeIfPresent(String.self, forKey: .error)
         stems = try container.decodeIfPresent([String: String].self, forKey: .stems) ?? [:]
+        addedAt = try container.decodeIfPresent(Double.self, forKey: .addedAt)
+    }
+
+    init(id: String, username: String, filename: String, virtualPath: String,
+         kind: String = "sample", status: String = "kept", bpm: Double? = nil,
+         localPath: String? = nil, alsPath: String? = nil, error: String? = nil,
+         stems: [String: String] = [:], addedAt: Double? = nil) {
+        self.id = id
+        self.username = username
+        self.filename = filename
+        self.virtualPath = virtualPath
+        self.kind = kind
+        self.status = status
+        self.bpm = bpm
+        self.localPath = localPath
+        self.alsPath = alsPath
+        self.error = error
+        self.stems = stems
+        self.addedAt = addedAt
     }
 }
 
