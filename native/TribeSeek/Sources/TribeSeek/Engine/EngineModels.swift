@@ -234,6 +234,110 @@ struct RolodexPage: Decodable {
     let entries: [RolodexEntry]
 }
 
+struct RendererReadiness: Decodable {
+    let ready: Bool
+    let message: String
+}
+
+struct SettingsPayload: Decodable {
+
+    let workDir: String
+    let outputDir: String
+    let exportDir: String
+    let rolodexPath: String
+    let memberName: String
+    let renderer: String
+    let preset: String
+    let mvsepSepType: String
+    let pcURL: String
+    let previewCacheMB: Int
+    let warpStems: Bool
+    let openAfterBuild: Bool
+    let warpMode: String
+    let presets: [String]
+    let warpModes: [String]
+    let rendererAvailable: [String: RendererReadiness]
+    let mvsepTokenSet: Bool
+    let pcTokenSet: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case renderer, preset, presets
+        case workDir = "work_dir"
+        case outputDir = "output_dir"
+        case exportDir = "export_dir"
+        case rolodexPath = "rolodex_path"
+        case memberName = "member_name"
+        case mvsepSepType = "mvsep_sep_type"
+        case pcURL = "pc_url"
+        case previewCacheMB = "preview_cache_mb"
+        case warpStems = "warp_stems"
+        case openAfterBuild = "open_after_build"
+        case warpMode = "warp_mode"
+        case warpModes = "warp_modes"
+        case rendererAvailable = "renderer_available"
+        case mvsepTokenSet = "mvsep_token_set"
+        case pcTokenSet = "pc_token_set"
+    }
+}
+
+struct SettingsPatch: Encodable {
+
+    var workDir: String?
+    var outputDir: String?
+    var exportDir: String?
+    var rolodexPath: String?
+    var memberName: String?
+    var renderer: String?
+    var preset: String?
+    var mvsepSepType: String?
+    var pcURL: String?
+    var previewCacheMB: Int?
+    var warpStems: Bool?
+    var openAfterBuild: Bool?
+    var warpMode: String?
+    var mvsepToken: String?
+    var pcToken: String?
+
+    enum CodingKeys: String, CodingKey {
+        case renderer, preset
+        case workDir = "work_dir"
+        case outputDir = "output_dir"
+        case exportDir = "export_dir"
+        case rolodexPath = "rolodex_path"
+        case memberName = "member_name"
+        case mvsepSepType = "mvsep_sep_type"
+        case pcURL = "pc_url"
+        case previewCacheMB = "preview_cache_mb"
+        case warpStems = "warp_stems"
+        case openAfterBuild = "open_after_build"
+        case warpMode = "warp_mode"
+        case mvsepToken = "mvsep_token"
+        case pcToken = "pc_token"
+    }
+
+    init(workDir: String? = nil, outputDir: String? = nil, exportDir: String? = nil,
+         rolodexPath: String? = nil, memberName: String? = nil, renderer: String? = nil,
+         preset: String? = nil, mvsepSepType: String? = nil, pcURL: String? = nil,
+         previewCacheMB: Int? = nil, warpStems: Bool? = nil, openAfterBuild: Bool? = nil,
+         warpMode: String? = nil, mvsepToken: String? = nil, pcToken: String? = nil) {
+        self.workDir = workDir
+        self.outputDir = outputDir
+        self.exportDir = exportDir
+        self.rolodexPath = rolodexPath
+        self.memberName = memberName
+        self.renderer = renderer
+        self.preset = preset
+        self.mvsepSepType = mvsepSepType
+        self.pcURL = pcURL
+        self.previewCacheMB = previewCacheMB
+        self.warpStems = warpStems
+        self.openAfterBuild = openAfterBuild
+        self.warpMode = warpMode
+        self.mvsepToken = mvsepToken
+        self.pcToken = pcToken
+    }
+}
+
 struct UserStatusRow: Decodable {
     let username: String
     let status: String

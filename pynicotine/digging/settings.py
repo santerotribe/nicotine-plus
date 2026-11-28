@@ -47,6 +47,84 @@ def renderer_available(renderer: str, settings: "DiggingSettings") -> tuple[bool
     return False, f"Unknown renderer: {renderer}"
 
 
+PUBLIC_FIELDS = (
+    "work_dir", "output_dir", "renderer", "preset", "model",
+    "mvsep_sep_type", "mvsep_poll_seconds", "pc_url",
+    "observatory_root", "live_app", "warp_stems", "warp_mode",
+    "open_after_build", "preview_cache_mb", "export_dir",
+    "rolodex_path", "member_name",
+)
+
+SECRET_FIELDS = ("mvsep_token", "pc_token")
+
+
+def public_settings(settings: "DiggingSettings") -> dict:
+    """Settings for a front end: no secrets, plus what a picker needs."""
+
+    from pynicotine.digging.ableton import WARP_MODES
+
+    payload = {key: getattr(settings, key) for key in PUBLIC_FIELDS}
+
+    for field in SECRET_FIELDS:
+        payload[field + "_set"] = bool(getattr(settings, field, ""))
+
+    payload["presets"] = sorted(STEM_PRESETS)
+    payload["warp_modes"] = sorted(WARP_MODES)
+    payload["renderer_available"] = {
+        renderer: dict(zip(("ready", "message"), renderer_available(renderer, settings)))
+        for renderer in ("mvsep", "pc", "local")
+    }
+
+    return payload
+
+
+def apply_settings(settings: "DiggingSettings", payload: dict) -> "DiggingSettings":
+    """Apply a validated subset of settings. Raises ValueError on bad input."""
+
+    from pynicotine.digging.ableton import WARP_MODES
+
+    for key, value in payload.items():
+        if key in SECRET_FIELDS:
+            if not isinstance(value, str):
+                raise ValueError(f"{key} must be a string")
+            setattr(settings, key, value)
+            continue
+
+        if key not in PUBLIC_FIELDS:
+            raise ValueError(f"unknown setting: {key}")
+
+        if key in ("warp_stems", "open_after_build"):
+            if not isinstance(value, bool):
+                raise ValueError(f"{key} must be a boolean")
+            setattr(settings, key, value)
+            continue
+
+        if key in ("preview_cache_mb", "mvsep_poll_seconds"):
+            if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+                raise ValueError(f"{key} must be a non-negative integer")
+            setattr(settings, key, value)
+            continue
+
+        if not isinstance(value, str):
+            raise ValueError(f"{key} must be a string")
+
+        if key == "renderer" and value not in ("mvsep", "pc", "local"):
+            raise ValueError(f"unknown renderer: {value}")
+
+        if key == "preset" and value not in STEM_PRESETS:
+            raise ValueError(f"unknown preset: {value}")
+
+        if key == "warp_mode" and value not in WARP_MODES:
+            raise ValueError(f"unknown warp mode: {value}")
+
+        if key == "member_name" and not value.strip():
+            raise ValueError("member_name cannot be empty")
+
+        setattr(settings, key, value)
+
+    return settings
+
+
 def default_config_dir() -> Path:
     """Return the Nicotine+ config directory.
 

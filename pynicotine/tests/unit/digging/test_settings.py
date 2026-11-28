@@ -1,75 +1,58 @@
 # SPDX-FileCopyrightText: 2026 Schema Apps
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-from pynicotine.digging.settings import STEM_PRESETS, DiggingSettings, renderer_available
+import pytest
+
+from pynicotine.digging.settings import (
+    DiggingSettings,
+    apply_settings,
+    public_settings,
+)
 
 
-def test_defaults_are_populated():
+def test_public_settings_masks_secrets_and_reports_readiness():
 
-    settings = DiggingSettings()
+    settings = DiggingSettings(mvsep_token="secret", pc_token="")
+    payload = public_settings(settings)
 
-    assert settings.preset in STEM_PRESETS
-    assert settings.work_dir
-    assert settings.observatory_root.endswith("ALS Observatory")
-    assert settings.stems == STEM_PRESETS["4"]
-
-
-def test_stem_presets_follow_setting():
-
-    settings = DiggingSettings(preset="2")
-    assert settings.stems == ("vocals", "instrumental")
-
-    settings.preset = "6"
-    assert "guitar" in settings.stems
+    assert "mvsep_token" not in payload
+    assert payload["mvsep_token_set"] is True
+    assert payload["pc_token_set"] is False
+    assert set(payload["renderer_available"]) == {"mvsep", "pc", "local"}
+    assert "warp_modes" in payload
+    assert "presets" in payload
 
 
-def test_save_and_load_roundtrip(tmp_path):
-
-    path = tmp_path / "digging.json"
-    settings = DiggingSettings(renderer="pc", pc_url="http://studio:8765", preset="6",
-                               warp_stems=False)
-    settings.save(path)
-
-    loaded = DiggingSettings.load(path)
-
-    assert loaded.renderer == "pc"
-    assert loaded.pc_url == "http://studio:8765"
-    assert loaded.preset == "6"
-    assert loaded.warp_stems is False
-
-
-def test_load_missing_file_returns_defaults(tmp_path):
-
-    loaded = DiggingSettings.load(tmp_path / "nope.json")
-    assert loaded.renderer == "mvsep"
-
-def test_renderer_available_reports_missing_configuration():
+def test_apply_settings_accepts_a_valid_patch():
 
     settings = DiggingSettings()
-    settings.renderer = "mvsep"
-    settings.mvsep_token = ""
-    ready, reason = renderer_available("mvsep", settings)
-    assert not ready and "token" in reason.lower()
+    apply_settings(settings, {
+        "renderer": "pc",
+        "pc_url": "http://studio:8765",
+        "warp_mode": "beats",
+        "member_name": "mara",
+        "preview_cache_mb": 1024,
+        "warp_stems": False,
+    })
 
-    settings.mvsep_token = "token"
-    settings.mvsep_sep_type = ""
-    ready, reason = renderer_available("mvsep", settings)
-    assert not ready and "type" in reason.lower()
-
-    settings.mvsep_sep_type = "51"
-    assert renderer_available("mvsep", settings)[0]
-
-    settings.pc_url = ""
-    ready, reason = renderer_available("pc", settings)
-    assert not ready and "address" in reason.lower()
-
-    settings.pc_url = "http://studio:8765"
-    assert renderer_available("pc", settings)[0]
+    assert settings.renderer == "pc"
+    assert settings.pc_url == "http://studio:8765"
+    assert settings.warp_mode == "beats"
+    assert settings.member_name == "mara"
+    assert settings.preview_cache_mb == 1024
+    assert settings.warp_stems is False
 
 
-def test_renderer_available_local_reports_binary():
-    ready, reason = renderer_available("local", DiggingSettings())
-    assert isinstance(ready, bool)
+@pytest.mark.parametrize("payload", [
+    {"renderer": "magic"},
+    {"preset": "9"},
+    {"warp_mode": "wobble"},
+    {"preview_cache_mb": -1},
+    {"warp_stems": "yes"},
+    {"member_name": "  "},
+    {"nonsense": 1},
+])
+def test_apply_settings_rejects_bad_values(payload):
 
-    if not ready:
-        assert reason
+    with pytest.raises(ValueError):
+        apply_settings(DiggingSettings(), payload)

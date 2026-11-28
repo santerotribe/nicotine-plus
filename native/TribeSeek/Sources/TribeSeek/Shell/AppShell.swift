@@ -26,6 +26,9 @@ struct AppShell: View {
                 } else if model.section == .rolodex {
                     RolodexScreen(model: model)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if model.section == .rig {
+                    RigScreen(settings: model.settings)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                 HStack(spacing: 0) {
                     Group {

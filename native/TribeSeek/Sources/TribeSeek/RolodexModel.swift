@@ -100,12 +100,21 @@ final class RolodexModel {
             tracks = page.tracks
         }
 
+        starredPeers = Set(UserDefaults.standard.stringArray(forKey: "rolodex.starred") ?? [])
+
         if let page = try? await client.rolodex() {
             ledger = page.entries
             member = page.member
-        }
 
-        starredPeers = Set(UserDefaults.standard.stringArray(forKey: "rolodex.starred") ?? [])
+            let ledgerStars = Set(page.entries.filter { $0.kind == "star" }.map(\.peer))
+            starredPeers.formUnion(ledgerStars)
+
+            // One-time migration: stars that only exist locally are pushed to
+            // the shared ledger so the crew sees them too.
+            for peer in starredPeers where !ledgerStars.contains(peer) {
+                try? await client.starPeer(peer: peer, starred: true)
+            }
+        }
 
         isLoading = false
 
@@ -147,12 +156,18 @@ final class RolodexModel {
         }
     }
 
-    func toggleStar(_ username: String) {
+    func toggleStar(_ username: String) async {
 
-        if starredPeers.contains(username) {
-            starredPeers.remove(username)
-        } else {
+        let starred = !starredPeers.contains(username)
+
+        if let client {
+            try? await client.starPeer(peer: username, starred: starred)
+        }
+
+        if starred {
             starredPeers.insert(username)
+        } else {
+            starredPeers.remove(username)
         }
 
         UserDefaults.standard.set(Array(starredPeers).sorted(), forKey: "rolodex.starred")
@@ -190,6 +205,10 @@ final class RolodexModel {
 
         // The collective ledger adds peers and counts from other members.
         for entry in ledger where !entry.peer.isEmpty {
+            if entry.kind == "star" {
+                continue
+            }
+
             var source = map[entry.peer] ?? Source(username: entry.peer)
 
             source.crew += 1

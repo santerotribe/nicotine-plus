@@ -28,6 +28,8 @@ NICOTINE_API_PORT=8766 NICOTINE_API_TOKEN=secret \
 |---|---|---|
 | GET | `/health` | liveness, version, login flag (no token) |
 | GET | `/state` | username, status, privileges, counters |
+| GET | `/settings` | digging settings, secrets masked, renderer readiness |
+| POST | `/settings` | apply a validated subset of settings |
 | GET | `/events` | Server-Sent Events push channel |
 | GET | `/users/<user>/summary` | folders/files/shared size for a browsed user |
 | GET | `/users/<user>/folders?offset=&limit=` | paged folders with files/size/formats/lossless/duration |
@@ -36,6 +38,8 @@ NICOTINE_API_PORT=8766 NICOTINE_API_TOKEN=secret \
 | GET | `/users/<user>/status` | cached online/away/offline, or `unknown` |
 | POST | `/users/<user>/status` | ask Soulseek for that user's status |
 | GET | `/downloads?offset=&limit=` | transfers with raw progress |
+| GET | `/rolodex` | the collective ledger: entries, path, member |
+| POST | `/rolodex/star` | star or unstar a peer in the ledger |
 | GET | `/crate?kind=sample\|dj` | kept tracks, stems, Live set paths |
 | POST | `/crate/<id>/separate` | run the separation pipeline for a kept track |
 | POST | `/crate/<id>/kind` | move a track between the sample and DJ crates |

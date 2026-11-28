@@ -70,6 +70,28 @@ class Ledger:
 
         return entry
 
+    def star(self, peer: str, starred: bool) -> None:
+        """One star per member, so two people can star the same seller."""
+
+        self.load()
+
+        key = (peer, f"star:{self.member}")
+
+        if starred:
+            self.entries[key] = {
+                "peer": peer,
+                "virtual_path": key[1],
+                "folder": "",
+                "filename": "",
+                "kind": "star",
+                "found_by": self.member,
+                "added_at": time.time(),
+            }
+        else:
+            self.entries.pop(key, None)
+
+        self.save()
+
     def save(self) -> None:
 
         self.path.parent.mkdir(parents=True, exist_ok=True)

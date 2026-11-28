@@ -104,7 +104,7 @@ struct SourceCard: View {
                 Spacer(minLength: 4)
 
                 Button {
-                    model.rolodex.toggleStar(source.username)
+                    Task { await model.rolodex.toggleStar(source.username) }
                 } label: {
                     Image(systemName: source.starred ? "star.fill" : "star")
                         .font(.system(size: 12, weight: .medium))

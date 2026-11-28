@@ -62,6 +62,7 @@ final class AppModel {
     var searchDraft = ""
     var crate = CrateModel()
     var rolodex = RolodexModel()
+    var settings = SettingsModel()
 
     private var eventTask: Task<Void, Never>?
     private var stemTask: Task<Void, Never>?
@@ -95,6 +96,7 @@ final class AppModel {
         audition.client = client
         crate.client = client
         rolodex.client = client
+        settings.client = client
         for tab in searchTabs {
             tab.client = client
         }
@@ -220,6 +222,10 @@ final class AppModel {
 
         if section == .rolodex {
             await rolodex.load()
+        }
+
+        if section == .rig {
+            await settings.load()
         }
     }
 

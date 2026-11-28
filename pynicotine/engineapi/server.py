@@ -305,6 +305,11 @@ class Handler(BaseHTTPRequestHandler):
                 "event_subscribers": event_hub().subscriber_count,
             })
 
+        if parts == ["settings"]:
+            from pynicotine.digging.settings import DiggingSettings, public_settings
+
+            return self._reply(HTTPStatus.OK, public_settings(DiggingSettings.load()))
+
         if len(parts) == 3 and parts[0] == "users" and parts[2] == "summary":
             summary = core.userbrowse.user_summary(parts[1])
 
@@ -601,6 +606,45 @@ class Handler(BaseHTTPRequestHandler):
 
             track = self._invoke(lambda: session.keep(kind))
             return self._reply(HTTPStatus.ACCEPTED, {"track": track, "audition": session.summary()})
+
+        if parts == ["rolodex", "star"]:
+            from pynicotine.digging.rolodex import Ledger
+            from pynicotine.digging.settings import DiggingSettings
+
+            payload = self._body()
+            peer = str(payload.get("peer") or "").strip()
+            starred = bool(payload.get("starred"))
+
+            if not peer:
+                return self._error(HTTPStatus.BAD_REQUEST, "peer is required")
+
+            def apply_star() -> list[dict]:
+                settings = DiggingSettings.load()
+                ledger = Ledger(settings.rolodex_path, settings.member_name)
+                ledger.star(peer, starred)
+                return ledger.as_list()
+
+            return self._reply(HTTPStatus.OK, {"entries": self._invoke(apply_star)})
+
+        if parts == ["settings"]:
+            from pynicotine.digging.settings import (
+                DiggingSettings,
+                apply_settings,
+                public_settings,
+            )
+
+            payload = self._body()
+
+            if not isinstance(payload, dict):
+                return self._error(HTTPStatus.BAD_REQUEST, "settings must be an object")
+
+            def update() -> dict:
+                settings = DiggingSettings.load()
+                apply_settings(settings, payload)
+                settings.save()
+                return public_settings(settings)
+
+            return self._reply(HTTPStatus.OK, self._invoke(update))
 
         if parts == ["crate", "keep"]:
             from pynicotine.core import core

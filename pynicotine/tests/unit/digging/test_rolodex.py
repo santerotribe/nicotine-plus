@@ -32,3 +32,20 @@ def test_two_members_accumulate(tmp_path):
 
     assert {entry["peer"] for entry in entries} == {"peerA", "peerB"}
     assert {entry["found_by"] for entry in entries} == {"santero", "mara"}
+
+
+def test_stars_are_per_member(tmp_path):
+
+    path = tmp_path / "rolodex.json"
+
+    Ledger(path, "santero").star("dj", True)
+    Ledger(path, "mara").star("dj", True)
+
+    assert len(Ledger(path, "reader").as_list()) == 2
+
+    Ledger(path, "mara").star("dj", False)
+
+    remaining = Ledger(path, "reader").as_list()
+
+    assert len(remaining) == 1
+    assert remaining[0]["found_by"] == "santero"

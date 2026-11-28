@@ -170,8 +170,24 @@ struct EngineClient {
         try await get("/users/\(escape(user))/files?folder=\(escape(folder))&offset=\(offset)&limit=\(limit)")
     }
 
+    func settings() async throws -> SettingsPayload {
+        try await get("/settings")
+    }
+
+    func updateSettings(_ patch: SettingsPatch) async throws -> SettingsPayload {
+        try await post("/settings", body: patch, as: SettingsPayload.self)
+    }
+
     func rolodex() async throws -> RolodexPage {
         try await get("/rolodex")
+    }
+
+    func starPeer(peer: String, starred: Bool) async throws {
+        struct Body: Encodable { let peer: String; let starred: Bool }
+        struct Response: Decodable { let entries: [RolodexEntry] }
+
+        _ = try await post("/rolodex/star", body: Body(peer: peer, starred: starred),
+                           as: Response.self)
     }
 
     func requestUserStatus(user: String) async throws {
