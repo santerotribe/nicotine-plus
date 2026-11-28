@@ -94,3 +94,37 @@ Write `docs/REVIEW-FINDINGS.md` with findings ordered by severity, each with
 file:line, why it matters, and a suggested fix. Do not change code. Be
 adversarial about the engine concurrency and the freshness semantics; those are
 the two places I trust least.
+
+---
+
+## Update — 2026-11-28 (settings, Rig, ledger, stars)
+
+Reviewed state moved on since the first brief:
+
+- **Settings API**: `GET /settings` returns the digging settings with secrets
+  masked (`mvsep_token_set`, `pc_token_set`), renderer readiness, presets and
+  warp modes. `POST /settings` applies a validated subset
+  (`pynicotine/digging/settings.py: public_settings, apply_settings`).
+- **Rig screen** (`Screens/RigScreen.swift`, `SettingsModel.swift`): collective,
+  separation, output and cache cards; saves through the API.
+- **Collective ledger** (`pynicotine/digging/rolodex.py`): JSON at
+  `rolodex_path`, one entry per keep with `found_by`; `GET /rolodex`.
+  Stars are ledger entries keyed `(peer, star:<member>)`, so members can star
+  independently; local stars are pushed once on load.
+- **Status**: `GET/POST /users/<u>/status`; a bare GetUserStatus is ignored, so
+  the request sends WatchUser first. The endpoint maps the stored int through
+  `UserStatus`.
+
+New questions:
+
+- Is validating settings in `apply_settings` enough, or does a PATCH need to
+  create directories / verify paths exist?
+- Secrets are masked on read and only sent when non-empty; is that the right
+  write-only contract, and how should clearing a token work?
+- The ledger re-reads before every write and uses a temp file; is that enough
+  for a synced folder, or does it need a per-entry revision?
+- Stars as `(peer, star:<member>)` entries — does that survive an unstar by a
+  different member, and is the key collision-free enough?
+- The status endpoint stores every requested user forever; should it expire?
+
+Test commands are unchanged. Swift is now 10 tests, Python 175 passed / 1 skipped.
