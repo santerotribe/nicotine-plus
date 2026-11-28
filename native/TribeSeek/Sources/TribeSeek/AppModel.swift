@@ -117,6 +117,10 @@ final class AppModel {
             await submitSearch()
         }
 
+        if ProcessInfo.processInfo.environment["TRIBE_BINS"] == "1" {
+            browse.binGrid = true
+        }
+
         // A development aid: open a shelf at one folder, for the dig path.
         if let raw = ProcessInfo.processInfo.environment["TRIBE_DIG"],
            let split = raw.firstIndex(of: "|") {

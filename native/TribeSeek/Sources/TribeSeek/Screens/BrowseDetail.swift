@@ -62,6 +62,14 @@ struct BrowseDetail: View {
                 } else {
                     InstrumentLabel(text: model.browse.isBrowsing ? "BROWSING…" : "NO SUMMARY")
                 }
+
+                if let folder = model.browse.selectedFolder {
+                    Text(folder)
+                        .font(Theme.mono(9))
+                        .foregroundStyle(Theme.textMuted)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
             }
 
             Spacer()
@@ -73,21 +81,49 @@ struct BrowseDetail: View {
             .amberFocus()
         }
         .padding(.horizontal, 16)
-        .frame(height: 68)
+        .frame(height: 76)
         .background(Theme.bgBase)
     }
 
     private var folderList: some View {
 
         VStack(spacing: 0) {
-            DigSearchField(placeholder: "Filter folders", text: $model.browse.folderFilter)
-                .padding(.horizontal, 10)
-                .frame(height: 36)
+            HStack(spacing: 6) {
+                DigSearchField(placeholder: "Filter folders", text: $model.browse.folderFilter)
+
+                Button {
+                    model.browse.binGrid.toggle()
+                } label: {
+                    Image(systemName: model.browse.binGrid ? "list.bullet" : "square.grid.2x2")
+                        .font(.system(size: 10, weight: .medium))
+                }
+                .buttonStyle(DigIconKeyStyle(diameter: 24))
+                .amberFocus(12)
+                .help(model.browse.binGrid ? "List the folders" : "Show the bins")
+            }
+            .padding(.horizontal, 10)
+            .frame(height: 38)
 
             Divider().overlay(Theme.border)
 
             ScrollView {
-                LazyVStack(spacing: 0) {
+                if model.browse.binGrid, !model.browse.filteredFolders.isEmpty {
+                    LazyVGrid(
+                        columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible(), spacing: 6)],
+                        spacing: 6
+                    ) {
+                        ForEach(model.browse.filteredFolders) { folder in
+                            BinCard(
+                                folder: folder,
+                                isSelected: model.browse.selectedFolder == folder.name
+                            ) {
+                                Task { await model.browse.loadFiles(folder: folder.name) }
+                            }
+                        }
+                    }
+                    .padding(8)
+                } else {
+                    LazyVStack(spacing: 0) {
                     ForEach(model.browse.filteredFolders) { folder in
                         FolderRowView(
                             folder: folder,
@@ -115,7 +151,8 @@ struct BrowseDetail: View {
                         }
                     }
                 }
-                .padding(.vertical, 4)
+                    .padding(.vertical, 4)
+                }
             }
         }
     }
@@ -378,3 +415,64 @@ struct FileRowView: View {
         return "—"
     }
 }
+
+
+struct BinCard: View {
+
+    let folder: BrowserModel.FolderRow
+    let isSelected: Bool
+    let action: () -> Void
+
+    @State private var hover = false
+
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(folder.title)
+                    .font(Theme.sans(11.5, .medium))
+                    .foregroundStyle(isSelected ? Theme.textPrimary : Theme.textSecondary)
+                    .lineLimit(3)
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                Spacer(minLength: 2)
+
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text("\(folder.count)")
+                        .font(Theme.mono(15))
+                        .foregroundStyle(isSelected ? Theme.accent : Theme.textSecondary)
+                        .monospacedDigit()
+
+                    InstrumentLabel(text: "files", color: Theme.textMuted, tracking: 0.8)
+                }
+            }
+            .padding(9)
+            .frame(height: 88)
+            .background(
+                RoundedRectangle(cornerRadius: 5)
+                    .fill(isSelected ? Theme.accent.opacity(0.06)
+                          : (hover ? Theme.bgHover : Theme.bgControl))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 5)
+                    .strokeBorder(isSelected ? Theme.accent.opacity(0.55) : Theme.border,
+                                  lineWidth: 1)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hover = $0 }
+    }
+
+    private var parent: String {
+
+        var parts = folder.name.split(separator: "\\").map(String.init)
+
+        guard parts.count > 1 else { return "" }
+
+        parts.removeLast()
+
+        return parts.joined(separator: "\\")
+    }
+}
+

@@ -44,6 +44,8 @@ final class BrowserModel {
     var filter = ""
     /// Narrows the folder column without touching the share itself.
     var folderFilter = ""
+    /// Folders as cards rather than rows.
+    var binGrid = false
     var isLoading = false
     var isBrowsing = false
     var error = ""
