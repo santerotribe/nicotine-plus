@@ -27,10 +27,6 @@ struct AppShell: View {
                 HStack(spacing: 0) {
                     Group {
                         switch model.section {
-                        case .search:
-                            SearchColumn(model: model)
-                        case .shelf:
-                            BrowseColumn(model: model)
                         case .crates:
                             CrateColumn(model: model)
                         default:
@@ -44,10 +40,6 @@ struct AppShell: View {
 
                     Group {
                         switch model.section {
-                        case .search:
-                            SearchDetail(model: model)
-                        case .shelf:
-                            BrowseDetail(model: model)
                         case .crates:
                             CrateDetail(model: model)
                         default:
@@ -85,6 +77,11 @@ struct AppShell: View {
         .background(WindowConfigurator())
         .animation(.easeInOut(duration: 0.18), value: model.trayExpanded)
         .task(id: model.section) { await model.activateSection() }
+        .onChange(of: model.section) { previous, current in
+            if previous == .shelf, current != .shelf {
+                model.browse.commitSeen()
+            }
+        }
     }
 }
 

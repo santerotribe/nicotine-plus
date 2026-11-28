@@ -123,10 +123,11 @@ GET /users/santero/summary
 GET /users/santero/folders?limit=3
 {"total":27,"offset":0,"limit":3,
  "folders":[
-   {"name":"for santero","files":27,"size":4823910400,
-    "formats":{"flac":20,"mp3":7},"lossless":20,"duration":6480},
+   {"name":"for santero","files":29,"size":4823910400,
+    "audio_files":27,"audio_formats":{"flac":20,"mp3":7},
+    "lossless":20,"duration":6480},
    {"name":"for santero\\Ramoz ...","files":2,"size":104857600,
-    "formats":{"wav":2},"lossless":2,"duration":420}]}
+    "audio_files":2,"audio_formats":{"wav":2},"lossless":2,"duration":420}]}
 
 GET /users/santero/files?folder=for+santero&offset=0&limit=500
 {"total":27,"offset":0,"limit":500,

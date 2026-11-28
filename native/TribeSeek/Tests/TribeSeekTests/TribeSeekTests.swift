@@ -17,6 +17,37 @@ final class TribeSeekTests: XCTestCase {
         XCTAssertEqual(TimeFormat.clock(3725), "62:05")
     }
 
+    func testGenericBinsInheritTheirCollection() {
+        let bin = BrowserModel.FolderRow(
+            name: "@@peer\\Albums\\Big Gold Dreams\\CD 4",
+            count: 25,
+            size: 550_400_000,
+            audioFiles: 25,
+            audioFormats: ["flac": 25],
+            lossless: 25,
+            seconds: 3_600
+        )
+
+        XCTAssertTrue(bin.isGeneric)
+        XCTAssertEqual(bin.collectionTitle, "Big Gold Dreams")
+        XCTAssertEqual(bin.qualityLabel, "FLAC 25")
+        XCTAssertEqual(bin.losslessRatio, 1.0)
+
+        let album = BrowserModel.FolderRow(
+            name: "@@peer\\ZYX Italo\\Placebo [FLAC]",
+            count: 10,
+            size: 100,
+            audioFiles: 8,
+            audioFormats: ["flac": 8],
+            lossless: 8,
+            seconds: 100
+        )
+
+        XCTAssertFalse(album.isGeneric)
+        XCTAssertEqual(album.collectionTitle, "ZYX Italo")
+        XCTAssertEqual(album.losslessRatio, 1.0)
+    }
+
     @MainActor
     func testSearchTabKnowsWhenItIsUnused() {
         let tab = SearchModel()

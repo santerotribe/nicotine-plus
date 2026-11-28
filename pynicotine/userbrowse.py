@@ -45,14 +45,24 @@ class TaskType(StrEnum):
     THREAD = "thread"
 
 
-_LOSSLESS_FORMATS = {"flac", "wav", "aiff", "aif", "ape", "wv"}
+_AUDIO_FORMATS = {
+    "flac", "mp3", "wav", "aiff", "aif", "m4a", "ogg", "opus",
+    "wma", "ape", "wv", "alac",
+}
+_LOSSLESS_FORMATS = {"flac", "wav", "aiff", "aif", "ape", "wv", "alac"}
 
 
 def _folder_info(folder: str, files: list[SharedFile]) -> dict:
-    """Aggregate one share folder: count, bytes, formats and playing time."""
+    """Aggregate one share folder: tracks, bytes, audio formats, playing time.
+
+    "files" and "size" describe everything in the folder, covers included.
+    "audio_files", "audio_formats" and "lossless" describe only playable audio,
+    so a folder of eight FLACs and two cover JPEGs is 100% lossless, not 80%.
+    """
 
     size = 0
     duration = 0
+    audio_files = 0
     lossless = 0
     formats: Counter[str] = Counter()
 
@@ -62,23 +72,25 @@ def _folder_info(folder: str, files: list[SharedFile]) -> dict:
         name = file.path.rsplit("\\", 1)[-1]
         extension = name.rsplit(".", 1)[-1].lower() if "." in name else ""
 
-        if extension:
+        if extension in _AUDIO_FORMATS:
+            audio_files += 1
             formats[extension] += 1
 
             if extension in _LOSSLESS_FORMATS:
                 lossless += 1
 
-        attributes = getattr(file, "attributes", None)
-        length = getattr(attributes, "length", None) if attributes else None
+            attributes = getattr(file, "attributes", None)
+            length = getattr(attributes, "length", None) if attributes else None
 
-        if length and length > 0:
-            duration += length
+            if length and length > 0:
+                duration += length
 
     return {
         "name": folder,
         "files": len(files),
         "size": size,
-        "formats": dict(formats.most_common(4)),
+        "audio_files": audio_files,
+        "audio_formats": dict(formats.most_common(4)),
         "lossless": lossless,
         "duration": int(duration),
     }

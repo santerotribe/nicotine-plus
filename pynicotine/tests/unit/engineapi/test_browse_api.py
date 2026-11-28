@@ -68,8 +68,30 @@ def test_folder_page_reports_counts():
     assert page["total"] == 2
     assert page["folders"][0]["name"] == "B"
     assert page["folders"][0]["files"] == 1
-    assert page["folders"][0]["formats"] == {"mp3": 1}
+    assert page["folders"][0]["audio_files"] == 1
+    assert page["folders"][0]["audio_formats"] == {"mp3": 1}
     assert page["folders"][0]["duration"] == 200
+
+
+def test_folder_stats_count_audio_not_artwork():
+
+    browse = _browse({
+        "Album": [
+            _file("a.flac", size=1000),
+            _file("b.flac", size=2000),
+            _file("cover.jpg", size=50),
+            _file("notes.txt", size=10),
+        ],
+    })
+
+    info = browse.folder_page("dj", limit=1)["folders"][0]
+
+    assert info["files"] == 4
+    assert info["size"] == 3060
+    assert info["audio_files"] == 2
+    assert info["audio_formats"] == {"flac": 2}
+    assert info["lossless"] == 2
+    assert info["duration"] == 400
 
 
 def test_user_summary_is_cheap():

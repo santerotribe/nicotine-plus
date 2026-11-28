@@ -22,7 +22,8 @@ final class BrowserModel {
         let name: String
         let count: Int
         let size: Int64
-        let formats: [String: Int]
+        let audioFiles: Int
+        let audioFormats: [String: Int]
         let lossless: Int
         let seconds: Int
 
@@ -42,14 +43,15 @@ final class BrowserModel {
 
         /// "FLAC 9 · MP3 1", most common first.
         var qualityLabel: String {
-            formats.sorted { $0.value > $1.value }
+            audioFormats.sorted { $0.value > $1.value }
                 .prefix(2)
                 .map { "\($0.key.uppercased()) \($0.value)" }
                 .joined(separator: " · ")
         }
 
+        /// Lossless share of the audio, never of the covers and cue sheets.
         var losslessRatio: Double {
-            count > 0 ? Double(lossless) / Double(count) : 0
+            audioFiles > 0 ? Double(lossless) / Double(audioFiles) : 0
         }
 
         /// "CD 4", "FLAC" and "Disc 2" say nothing on their own; the album or
@@ -69,6 +71,10 @@ final class BrowserModel {
             while parts.count > 1, let last = parts.last, FolderRow.isGenericLeaf(last) {
                 parts.removeLast()
             }
+
+            // Only the share root is left: it names the seller's drive, not
+            // the record, so it is not useful context.
+            guard parts.count > 1 else { return "" }
 
             return parts.last ?? ""
         }
@@ -126,6 +132,10 @@ final class BrowserModel {
     var binSort: BinSort = .promising
     /// Folders that appeared or grew since this peer's last visit.
     var fresh: Set<String> = []
+    /// Set when a dig selects a folder, so the grid centres once, not on
+    /// every click.
+    var scrollToSelection = false
+    private var baselines: [String: SeenSnapshot] = [:]
     var isLoading = false
     var isBrowsing = false
     var error = ""
@@ -169,29 +179,103 @@ final class BrowserModel {
         }
     }
 
-    /// Compare the share with the last visit and remember this one. A folder is
-    /// fresh when it is new to the share or has gained files; the first visit
-    /// marks nothing, because everything would be new.
+    private struct SeenSnapshot: Codable {
+        var counts: [String: Int]
+        var sizes: [String: Int64]
+        var updated: Double
+    }
+
+    /// Compare the share with the last visit. A folder is fresh when it is new,
+    /// has gained files, or has grown in bytes (a replaced file changes size
+    /// without changing the count). The baseline is advanced when the visit
+    /// ends, never on every load, so the markers survive a Refresh.
     private func noteFresh(user: String) {
 
-        let key = "seenFolders." + user
-        let previous = UserDefaults.standard.dictionary(forKey: key) as? [String: Int] ?? [:]
-        var current: [String: Int] = [:]
+        let snapshot = baseline(for: user)
+
+        if snapshot.counts.isEmpty {
+            fresh = []
+            return
+        }
+
+        fresh = Set(folders.filter { folder in
+            guard let count = snapshot.counts[folder.name] else { return true }
+
+            if folder.count > count {
+                return true
+            }
+
+            return folder.size > (snapshot.sizes[folder.name] ?? 0)
+        }.map(\.name))
+    }
+
+    private func baseline(for user: String) -> SeenSnapshot {
+
+        if let cached = baselines[user] {
+            return cached
+        }
+
+        let snapshot: SeenSnapshot
+
+        if let data = UserDefaults.standard.data(forKey: "seenFolders.v2." + user),
+           let decoded = try? JSONDecoder().decode(SeenSnapshot.self, from: data) {
+            snapshot = decoded
+        } else {
+            snapshot = SeenSnapshot(counts: [:], sizes: [:], updated: 0)
+        }
+
+        baselines[user] = snapshot
+
+        return snapshot
+    }
+
+    /// Called when the shelf is left, the peer changes, or the app quits.
+    func commitSeen() {
+
+        guard let user = selectedUser, !folders.isEmpty else { return }
+
+        var counts: [String: Int] = [:]
+        var sizes: [String: Int64] = [:]
 
         for folder in folders {
-            current[folder.name] = folder.count
+            counts[folder.name] = folder.count
+            sizes[folder.name] = folder.size
         }
 
-        if previous.isEmpty {
-            fresh = []
-        } else {
-            fresh = Set(folders.filter { folder in
-                guard let seen = previous[folder.name] else { return true }
-                return folder.count > seen
-            }.map(\.name))
+        let snapshot = SeenSnapshot(
+            counts: counts,
+            sizes: sizes,
+            updated: Date().timeIntervalSince1970
+        )
+
+        baselines[user] = snapshot
+
+        if let data = try? JSONEncoder().encode(snapshot) {
+            UserDefaults.standard.set(data, forKey: "seenFolders.v2." + user)
         }
 
-        UserDefaults.standard.set(current, forKey: key)
+        pruneSeen()
+    }
+
+    /// A collective browses a lot of peers; keep the ledger to a season.
+    private func pruneSeen() {
+
+        let cutoff = Date().timeIntervalSince1970 - 60 * 24 * 60 * 60
+        let prefix = "seenFolders.v2."
+        let defaults = UserDefaults.standard
+
+        for key in defaults.dictionaryRepresentation().keys where key.hasPrefix(prefix) {
+            guard let data = defaults.data(forKey: key),
+                  let snapshot = try? JSONDecoder().decode(SeenSnapshot.self, from: data) else {
+                defaults.removeObject(forKey: key)
+                continue
+            }
+
+            if snapshot.updated < cutoff {
+                defaults.removeObject(forKey: key)
+                baselines.removeValue(forKey: String(key.dropFirst(prefix.count)))
+            }
+        }
     }
 
     var filteredFiles: [SharedFileRow] {
@@ -209,6 +293,10 @@ final class BrowserModel {
     func browse(user: String) async {
 
         guard let client else { return }
+
+        if let previous = selectedUser, previous != user {
+            commitSeen()
+        }
 
         selectedUser = user
         error = ""
@@ -296,7 +384,8 @@ final class BrowserModel {
                         name: $0.name,
                         count: $0.files,
                         size: $0.size,
-                        formats: $0.formats,
+                        audioFiles: $0.audioFiles,
+                        audioFormats: $0.audioFormats,
                         lossless: $0.lossless,
                         seconds: Int($0.duration)
                     )
@@ -347,6 +436,7 @@ final class BrowserModel {
 
         if folders.contains(where: { $0.name == folder }) {
             await loadFiles(folder: folder)
+            scrollToSelection = true
             return
         }
 
@@ -354,6 +444,7 @@ final class BrowserModel {
             $0.name.localizedCaseInsensitiveCompare(folder) == .orderedSame
         }) {
             await loadFiles(folder: match.name)
+            scrollToSelection = true
             return
         }
 

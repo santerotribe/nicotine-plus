@@ -201,6 +201,7 @@ final class AppModel {
         for tab in searchTabs {
             tab.cancel()
         }
+        browse.commitSeen()
         supervisor.stop()
     }
 

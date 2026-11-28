@@ -74,9 +74,16 @@ struct FolderInfo: Decodable {
     let name: String
     let files: Int
     let size: Int64
-    let formats: [String: Int]
+    let audioFiles: Int
+    let audioFormats: [String: Int]
     let lossless: Int
     let duration: Double
+
+    enum CodingKeys: String, CodingKey {
+        case name, files, size, lossless, duration
+        case audioFiles = "audio_files"
+        case audioFormats = "audio_formats"
+    }
 }
 
 struct FilePage: Decodable {

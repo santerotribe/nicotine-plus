@@ -188,11 +188,16 @@ struct BrowseDetail: View {
                 }
             }
             .task(id: model.browse.selectedFolder) {
-                guard let folder = model.browse.selectedFolder else { return }
+                guard model.browse.scrollToSelection,
+                      let folder = model.browse.selectedFolder else { return }
+
                 try? await Task.sleep(nanoseconds: 60_000_000)
+
                 withAnimation(.easeOut(duration: 0.15)) {
                     proxy.scrollTo(folder, anchor: .center)
                 }
+
+                model.browse.scrollToSelection = false
             }
             }
         }
@@ -204,27 +209,42 @@ struct BrowseDetail: View {
         if let name = model.browse.selectedFolder,
            let folder = model.browse.folders.first(where: { $0.name == name }) {
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(folder.title)
-                    .font(Theme.sans(13, .semibold))
-                    .foregroundStyle(Theme.textPrimary)
-                    .lineLimit(2)
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(folder.title)
+                        .font(Theme.sans(13, .semibold))
+                        .foregroundStyle(Theme.textPrimary)
+                        .lineLimit(2)
 
-                if folder.isGeneric, !folder.collectionTitle.isEmpty {
-                    Text(folder.collectionTitle)
-                        .font(Theme.sans(11))
-                        .foregroundStyle(Theme.textMuted)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
+                    if folder.isGeneric, !folder.collectionTitle.isEmpty {
+                        Text(folder.collectionTitle)
+                            .font(Theme.sans(11))
+                            .foregroundStyle(Theme.textMuted)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+
+                    HStack(spacing: 10) {
+                        InstrumentLabel(text: "\(folder.count) FILES")
+                        InstrumentLabel(text: folder.sizeLabel)
+
+                        if !folder.qualityLabel.isEmpty {
+                            InstrumentLabel(text: folder.qualityLabel)
+                        }
+                    }
                 }
 
-                HStack(spacing: 10) {
-                    InstrumentLabel(text: "\(folder.count) FILES")
-                    InstrumentLabel(text: folder.sizeLabel)
+                Spacer(minLength: 8)
 
-                    if !folder.qualityLabel.isEmpty {
-                        InstrumentLabel(text: folder.qualityLabel)
+                if let user = model.browse.selectedUser, let file = firstPlayableFile {
+                    Button("Audition bin") {
+                        Task {
+                            await model.audition(user: user, folder: name, file: file)
+                        }
                     }
+                    .buttonStyle(DigKeyStyle(dense: true))
+                    .amberFocus()
+                    .help("Audition the first track in this bin")
                 }
             }
             .padding(.horizontal, 16)
@@ -234,6 +254,15 @@ struct BrowseDetail: View {
             .overlay(alignment: .bottom) {
                 Rectangle().fill(Theme.border).frame(height: 1)
             }
+        }
+    }
+
+    private var firstPlayableFile: SharedFileRow? {
+
+        let extensions: Set<String> = ["mp3", "flac", "wav", "aif", "aiff", "m4a", "ogg", "opus"]
+
+        return model.browse.files.first {
+            extensions.contains(($0.name as NSString).pathExtension.lowercased())
         }
     }
 
@@ -589,17 +618,6 @@ struct BinCard: View {
         }
         .buttonStyle(.plain)
         .onHover { hover = $0 }
-    }
-
-    private var parent: String {
-
-        var parts = folder.name.split(separator: "\\").map(String.init)
-
-        guard parts.count > 1 else { return "" }
-
-        parts.removeLast()
-
-        return parts.joined(separator: "\\")
     }
 }
 
