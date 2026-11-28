@@ -314,8 +314,14 @@ class Handler(BaseHTTPRequestHandler):
             return self._reply(HTTPStatus.OK, summary)
 
         if len(parts) == 3 and parts[0] == "users" and parts[2] == "status":
+            from pynicotine.slskmessages import UserStatus
+
             status = core.users.statuses.get(parts[1])
-            name = getattr(status, "name", "unknown").lower() if status is not None else "unknown"
+
+            try:
+                name = UserStatus(int(status)).name.lower() if status is not None else "unknown"
+            except (TypeError, ValueError):
+                name = "unknown"
 
             return self._reply(HTTPStatus.OK, {"username": parts[1], "status": name})
 

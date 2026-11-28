@@ -169,6 +169,10 @@ class Users:
         if self.login_status == UserStatus.OFFLINE:
             return
 
+        # A bare GetUserStatus is ignored by the server for users we do not
+        # watch; subscribe once, then ask. The watch is what makes the reply
+        # arrive, and it also keeps later changes flowing.
+        core.send_message_to_server(WatchUser(username))
         core.send_message_to_server(GetUserStatus(username))
 
     def request_user_stats(self, username: str) -> None:

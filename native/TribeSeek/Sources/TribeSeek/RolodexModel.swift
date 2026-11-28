@@ -103,11 +103,23 @@ final class RolodexModel {
             try? await client.requestUserStatus(user: name)
         }
 
-        try? await Task.sleep(nanoseconds: 1_500_000_000)
+        // The server answers asynchronously; poll briefly instead of assuming
+        // one fixed pause is enough.
+        for _ in 0..<6 {
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
 
-        for name in names {
-            if let row = try? await client.userStatus(user: name), row.status != "unknown" {
-                statuses[name] = row.status
+            var pending = false
+
+            for name in names where statuses[name] == nil {
+                if let row = try? await client.userStatus(user: name), row.status != "unknown" {
+                    statuses[name] = row.status
+                } else {
+                    pending = true
+                }
+            }
+
+            if !pending {
+                break
             }
         }
     }
