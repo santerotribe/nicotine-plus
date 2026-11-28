@@ -313,6 +313,12 @@ class Handler(BaseHTTPRequestHandler):
 
             return self._reply(HTTPStatus.OK, summary)
 
+        if len(parts) == 3 and parts[0] == "users" and parts[2] == "status":
+            status = core.users.statuses.get(parts[1])
+            name = getattr(status, "name", "unknown").lower() if status is not None else "unknown"
+
+            return self._reply(HTTPStatus.OK, {"username": parts[1], "status": name})
+
         if len(parts) == 3 and parts[0] == "users" and parts[2] == "folders":
             offset = self._int(query, "offset", 0)
             limit = self._int(query, "limit", DEFAULT_LIMIT)
@@ -524,6 +530,11 @@ class Handler(BaseHTTPRequestHandler):
             # retrying; a front end can ask it to try again once that client quits.
             self._invoke(core.connect)
             return self._reply(HTTPStatus.ACCEPTED, {"connecting": True})
+
+        if len(parts) == 3 and parts[0] == "users" and parts[2] == "status":
+            username = parts[1]
+            self._invoke(lambda: core.users.request_user_status(username))
+            return self._reply(HTTPStatus.ACCEPTED, {"requested": username})
 
         if len(parts) == 3 and parts[0] == "users" and parts[2] == "browse":
             username = parts[1]

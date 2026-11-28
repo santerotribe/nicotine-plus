@@ -208,6 +208,11 @@ struct StemFile: Identifiable, Hashable {
     var exists: Bool { FileManager.default.fileExists(atPath: path) }
 }
 
+struct UserStatusRow: Decodable {
+    let username: String
+    let status: String
+}
+
 struct CratePage: Decodable {
     let total: Int
     let tracks: [CrateTrack]

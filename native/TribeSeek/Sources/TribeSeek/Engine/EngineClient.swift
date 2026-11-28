@@ -170,6 +170,15 @@ struct EngineClient {
         try await get("/users/\(escape(user))/files?folder=\(escape(folder))&offset=\(offset)&limit=\(limit)")
     }
 
+    func requestUserStatus(user: String) async throws {
+        struct Response: Decodable { let requested: String }
+        _ = try await post("/users/\(escape(user))/status", as: Response.self)
+    }
+
+    func userStatus(user: String) async throws -> UserStatusRow {
+        try await get("/users/\(escape(user))/status")
+    }
+
     // MARK: - Downloads / crate
 
     func downloads() async throws -> DownloadsPage {

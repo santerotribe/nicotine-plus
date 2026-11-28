@@ -49,6 +49,7 @@ final class RolodexModel {
 
     var client: EngineClient?
     var tracks: [CrateTrack] = []
+    var statuses: [String: String] = [:]
     var filter = ""
     var isLoading = false
 
@@ -84,6 +85,31 @@ final class RolodexModel {
         starredPeers = Set(UserDefaults.standard.stringArray(forKey: "rolodex.starred") ?? [])
 
         isLoading = false
+
+        Task { await self.refreshStatuses() }
+    }
+
+    /// Ask the server about each source once, then read the answers back. The
+    /// request is asynchronous on the Soulseek side, hence the short pause.
+    func refreshStatuses() async {
+
+        guard let client else { return }
+
+        let names = Array(sources.prefix(120).map(\.username))
+
+        guard !names.isEmpty else { return }
+
+        for name in names {
+            try? await client.requestUserStatus(user: name)
+        }
+
+        try? await Task.sleep(nanoseconds: 1_500_000_000)
+
+        for name in names {
+            if let row = try? await client.userStatus(user: name), row.status != "unknown" {
+                statuses[name] = row.status
+            }
+        }
     }
 
     func toggleStar(_ username: String) {

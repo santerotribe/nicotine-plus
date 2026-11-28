@@ -163,6 +163,14 @@ class Users:
     def request_set_status(self, status: UserStatus) -> None:
         core.send_message_to_server(SetStatus(status))
 
+    def request_user_status(self, username: str) -> None:
+        """Ask the server for one user's status; the reply lands on user-status."""
+
+        if self.login_status == UserStatus.OFFLINE:
+            return
+
+        core.send_message_to_server(GetUserStatus(username))
+
     def request_user_stats(self, username: str) -> None:
         core.send_message_to_server(GetUserStats(username))
 
@@ -408,8 +416,12 @@ class Users:
                 self.request_user_stats(username)
                 self.request_ip_address(username)
 
+        # Remember every status we asked for, not only watched users: the shelf
+        # asks about the Rolodex peers one at a time.
+        self.statuses[username] = status
+
         if watched_user is not None:
-            self.statuses[username] = watched_user.stats.status = status
+            watched_user.stats.status = status
 
         core.pluginhandler.user_status_notification(username, status, msg.privileged)
 

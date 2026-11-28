@@ -82,10 +82,18 @@ struct SourceCard: View {
                 Monogram(text: source.username, size: 34)
 
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(source.username)
-                        .font(Theme.sans(13, .semibold))
-                        .foregroundStyle(Theme.textPrimary)
-                        .lineLimit(1)
+                    HStack(spacing: 5) {
+                        Circle()
+                            .fill(statusColor)
+                            .frame(width: 6, height: 6)
+                            .overlay(Circle().strokeBorder(Theme.borderMedium, lineWidth: 0.5))
+                            .help(statusLabel)
+
+                        Text(source.username)
+                            .font(Theme.sans(13, .semibold))
+                            .foregroundStyle(Theme.textPrimary)
+                            .lineLimit(1)
+                    }
 
                     Text(source.lastLabel.isEmpty ? "no keeps yet" : "last kept \(source.lastLabel)")
                         .font(Theme.mono(8.5))
@@ -151,5 +159,27 @@ struct SourceCard: View {
                 .strokeBorder(source.starred ? Theme.accent.opacity(0.35) : Theme.border,
                               lineWidth: 1)
         )
+    }
+
+    private var status: String {
+        model.rolodex.statuses[source.username] ?? "unknown"
+    }
+
+    private var statusColor: Color {
+        switch status {
+        case "online": Theme.statusSaved
+        case "away": Theme.accent
+        case "offline": Theme.textMuted
+        default: Color.clear
+        }
+    }
+
+    private var statusLabel: String {
+        switch status {
+        case "online": "Online"
+        case "away": "Away"
+        case "offline": "Offline"
+        default: "Status unknown"
+        }
     }
 }

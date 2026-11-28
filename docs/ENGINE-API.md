@@ -33,6 +33,8 @@ NICOTINE_API_PORT=8766 NICOTINE_API_TOKEN=secret \
 | GET | `/users/<user>/folders?offset=&limit=` | paged folders with files/size/formats/lossless/duration |
 | GET | `/users/<user>/files?folder=&offset=&limit=` | paged files of one folder |
 | POST | `/users/<user>/browse` | request the user's share list |
+| GET | `/users/<user>/status` | cached online/away/offline, or `unknown` |
+| POST | `/users/<user>/status` | ask Soulseek for that user's status |
 | GET | `/downloads?offset=&limit=` | transfers with raw progress |
 | GET | `/crate?kind=sample\|dj` | kept tracks, stems, Live set paths |
 | POST | `/crate/<id>/separate` | run the separation pipeline for a kept track |
