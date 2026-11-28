@@ -119,6 +119,13 @@ class PipelineService:
 
         key = track.id
 
+        from pynicotine.digging.actions import record_local_path
+
+        try:
+            record_local_path(track, path, self.settings)
+        except OSError:
+            pass
+
         with self._lock:
             if key in self._running:
                 return
@@ -130,18 +137,9 @@ class PipelineService:
 
     def _set_status(self, track_id: str, **fields) -> None:
 
-        crate = self._crate()
-        track = None
-
-        for entry in crate.tracks:
-            if entry.id == track_id:
-                for name, value in fields.items():
-                    setattr(entry, name, value)
-
-                track = entry
-                break
-
-        crate.save()
+        # update() reloads under the crate lock, so a status write cannot drop
+        # a keep that landed on another thread between load and save.
+        track = self._crate().update(track_id, **fields)
 
         if track is not None:
             events.emit("digging-status", track.id, **track_event_fields(track))
@@ -150,10 +148,11 @@ class PipelineService:
 
     def _process(self, track, path: Path) -> None:
 
-        self._set_status(track.id, status=STATUS_SEPARATING)
-        log.add(f"Digging: separating {path.name} ({self.settings.renderer})")
-
         try:
+            # Inside the try: a failure here must still release _running.
+            self._set_status(track.id, status=STATUS_SEPARATING)
+            log.add(f"Digging: separating {path.name} ({self.settings.renderer})")
+
             separated = pipeline.separate(
                 path, self.settings,
                 progress=lambda message, fraction: log.add_debug(f"Digging: {message} ({fraction:.0%})"),

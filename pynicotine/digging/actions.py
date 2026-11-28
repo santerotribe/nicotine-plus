@@ -5,13 +5,18 @@
 
 from __future__ import annotations
 
+import shutil
+
 from dataclasses import dataclass
+from pathlib import Path
 
 from pynicotine.digging.crate import STATUS_KEPT, Crate, CrateTrack
+from pynicotine.digging.paths import virtual_basename
 from pynicotine.digging.rolodex import Ledger
 from pynicotine.digging.settings import DiggingSettings
 from pynicotine.events import events
 from pynicotine.logfacility import log
+from pynicotine.transfers import TransferStatus
 
 
 @dataclass
@@ -31,15 +36,11 @@ def record_local_path(track: CrateTrack, path: str,
                       settings: DiggingSettings | None = None) -> None:
 
     settings = settings or DiggingSettings.load()
-    crate = crate_for(settings)
-    track.local_path = str(path)
+    updated = crate_for(settings).update(track.id, local_path=str(path))
 
-    for entry in crate.tracks:
-        if entry.id == track.id:
-            entry.local_path = str(path)
-
-    crate.save()
-    _notify(track)
+    if updated is not None:
+        track.local_path = str(path)
+        _notify(updated)
 
 
 def crate_for(settings: DiggingSettings | None = None) -> Crate:
@@ -79,14 +80,62 @@ def keep_source(core, source: TrackSource, settings: DiggingSettings | None = No
     download_folder = settings.work_path / "downloads" / source.username
     download_folder.mkdir(parents=True, exist_ok=True)
 
+    # Our own share: the file is already on disk, no transfer is involved.
+    if source.username == getattr(core.users, "login_username", ""):
+        try:
+            local = Path(core.shares.virtual2real(source.folder_path)) / source.filename
+
+        except Exception:  # noqa: BLE001 - a share mapping failure must not break the keep
+            local = None
+
+        if local is not None and local.is_file():
+            track.local_path = str(local)
+            updated = crate.update(track.id, local_path=str(local), status=STATUS_KEPT)
+
+            if updated is not None:
+                _notify(updated)
+
+            from pynicotine.digging.service import start_service
+
+            start_service().kick(track)
+            return track
+
+    existing = core.downloads.transfers.get(source.username + source.virtual_path)
+    kept_path = None
+
     if peer is not None and peer.username == source.username and peer.virtual_path == source.virtual_path:
-        # A preview download is already in flight: promote it when it finishes
+        # A finished preview can be promoted; a running one cannot.
         kept_path = peer.promote(download_folder)
 
-        if kept_path is not None:
-            track.local_path = str(kept_path)
+    if kept_path is None and existing is not None:
+        finished_file = Path(existing.folder_path or "") / virtual_basename(source.virtual_path)
 
-        crate.save()
+        if existing.status == TransferStatus.FINISHED and finished_file.is_file():
+            target = download_folder / finished_file.name
+
+            if not target.exists():
+                shutil.copy2(finished_file, target)
+
+            kept_path = target
+
+        else:
+            # The preview belongs to the audition, not to the keep: drop it and
+            # queue a real download in the keep folder. Otherwise the transfer
+            # is paused when the next audition starts and never arrives.
+            try:
+                core.downloads.abort_downloads({existing: None}, status=TransferStatus.CANCELLED)
+                core.downloads.clear_downloads({existing: None})
+
+            except Exception as error:  # noqa: BLE001 - keep the keep
+                log.add_debug(f"Digging: could not reset preview transfer: {error}")
+
+    if kept_path is not None:
+        track.local_path = str(kept_path)
+        updated = crate.update(track.id, local_path=str(kept_path), status=STATUS_KEPT)
+
+        if updated is not None:
+            _notify(updated)
+
         return track
 
     core.downloads.enqueue_download(

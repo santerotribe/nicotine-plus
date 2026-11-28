@@ -77,3 +77,47 @@ def test_crate_kind_is_validated(tmp_path):
         raise AssertionError("an unknown kind must be rejected")
 
     assert crate.set_kind("missing", "dj") is None
+
+
+def test_add_reloads_before_writing(tmp_path):
+
+    path = tmp_path / "crate.json"
+
+    first = Crate(path)
+    first.add(CrateTrack(username="u", virtual_path="a"))
+
+    second = Crate(path)
+    second.add(CrateTrack(username="u", virtual_path="b"))
+
+    # The first instance is stale; its add must not drop the second's track.
+    first.add(CrateTrack(username="u", virtual_path="c"))
+
+    assert {track.virtual_path for track in Crate(path)} == {"a", "b", "c"}
+
+
+def test_second_kind_moves_the_track(tmp_path):
+
+    crate = Crate(tmp_path / "crate.json")
+    track = crate.add(CrateTrack(username="u", virtual_path="a", kind="sample"))
+
+    again = crate.add(CrateTrack(username="u", virtual_path="a", kind="dj"))
+
+    assert again.id == track.id
+    assert again.kind == "dj"
+    assert Crate(crate.path).get(track.id).kind == "dj"
+
+
+def test_update_keeps_concurrent_entries(tmp_path):
+
+    path = tmp_path / "crate.json"
+
+    writer = Crate(path)
+    track = writer.add(CrateTrack(username="u", virtual_path="a"))
+
+    other = Crate(path)
+    other.add(CrateTrack(username="u", virtual_path="b"))
+
+    writer.update(track.id, status="ready")
+
+    assert {entry.virtual_path for entry in Crate(path)} == {"a", "b"}
+    assert Crate(path).get(track.id).status == "ready"

@@ -6,7 +6,10 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import tempfile
+import threading
 import time
 import uuid
 
@@ -68,8 +71,15 @@ class CrateTrack:
         return cls(**{key: value for key, value in payload.items() if key in known})
 
 
+_CRATE_LOCK = threading.RLock()
+
+
 class Crate:
-    """JSON-backed list of tracks. Safe to call from a GUI thread or CLI."""
+    """JSON-backed list of tracks, mutated under one process-wide lock.
+
+    Every mutation re-reads the file first, so a keep that lands while the
+    pipeline is writing a status cannot be dropped by a stale save.
+    """
 
     def __init__(self, path: Path | None = None) -> None:
         self.path = Path(path) if path else None
@@ -83,23 +93,34 @@ class Crate:
         return iter(self.tracks)
 
     def add(self, track: CrateTrack) -> CrateTrack:
-        for existing in self.tracks:
-            if existing.username == track.username and existing.virtual_path == track.virtual_path:
-                return existing
+        with _CRATE_LOCK:
+            self.load()
 
-        self.tracks.append(track)
-        self.save()
-        return track
+            for existing in self.tracks:
+                if existing.username == track.username and existing.virtual_path == track.virtual_path:
+                    if track.kind != existing.kind:
+                        # Move-only semantics: a second keep into another crate
+                        # moves the track instead of silently doing nothing.
+                        existing.kind = track.kind
+                        self.save()
+
+                    return existing
+
+            self.tracks.append(track)
+            self.save()
+            return track
 
     def remove(self, track_id: str) -> bool:
-        before = len(self.tracks)
-        self.tracks = [track for track in self.tracks if track.id != track_id]
+        with _CRATE_LOCK:
+            self.load()
+            before = len(self.tracks)
+            self.tracks = [track for track in self.tracks if track.id != track_id]
 
-        if len(self.tracks) != before:
-            self.save()
-            return True
+            if len(self.tracks) != before:
+                self.save()
+                return True
 
-        return False
+            return False
 
     def get(self, track_id: str) -> CrateTrack | None:
         for track in self.tracks:
@@ -118,14 +139,32 @@ class Crate:
         if kind not in KINDS:
             raise ValueError(f"unknown crate kind: {kind}")
 
-        track = self.get(track_id)
+        with _CRATE_LOCK:
+            self.load()
+            track = self.get(track_id)
 
-        if track is None:
-            return None
+            if track is None:
+                return None
 
-        track.kind = kind
-        self.save()
-        return track
+            track.kind = kind
+            self.save()
+            return track
+
+    def update(self, track_id: str, **fields) -> CrateTrack | None:
+        """Reload, apply fields, save. The only safe way to change a track."""
+
+        with _CRATE_LOCK:
+            self.load()
+            track = self.get(track_id)
+
+            if track is None:
+                return None
+
+            for name, value in fields.items():
+                setattr(track, name, value)
+
+            self.save()
+            return track
 
     def load(self) -> None:
         if not self.path or not self.path.is_file():
@@ -146,8 +185,20 @@ class Crate:
         if not self.path:
             return
 
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        payload = {"version": 1, "tracks": [track.to_dict() for track in self.tracks]}
-        tmp = self.path.with_suffix(".json.tmp")
-        tmp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-        tmp.replace(self.path)
+        with _CRATE_LOCK:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            payload = {"version": 1, "tracks": [track.to_dict() for track in self.tracks]}
+
+            # A unique name: two saves must never collide on the temp file.
+            descriptor, temporary = tempfile.mkstemp(
+                dir=self.path.parent, prefix=".crate-", suffix=".json.tmp")
+
+            try:
+                with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+                    json.dump(payload, handle, indent=2)
+
+                os.replace(temporary, self.path)
+
+            finally:
+                if os.path.exists(temporary):
+                    os.unlink(temporary)
