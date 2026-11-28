@@ -8,8 +8,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from pynicotine.digging.crate import STATUS_KEPT, Crate, CrateTrack
+from pynicotine.digging.rolodex import Ledger
 from pynicotine.digging.settings import DiggingSettings
 from pynicotine.events import events
+from pynicotine.logfacility import log
 
 
 @dataclass
@@ -64,6 +66,15 @@ def keep_source(core, source: TrackSource, settings: DiggingSettings | None = No
     track.status = STATUS_KEPT
     crate.save()
     _notify(track)
+
+    try:
+        Ledger(settings.rolodex_path, settings.member_name).add(
+            source.username, source.virtual_path, source.folder_path,
+            source.filename, kind,
+        )
+
+    except OSError as error:
+        log.add("Digging: ledger write failed: %(error)s", {"error": error})
 
     download_folder = settings.work_path / "downloads" / source.username
     download_folder.mkdir(parents=True, exist_ok=True)

@@ -360,6 +360,19 @@ class Handler(BaseHTTPRequestHandler):
                 "downloads": [transfer_dict(entry) for entry in page],
             })
 
+        if parts == ["rolodex"]:
+            from pynicotine.digging.rolodex import Ledger
+            from pynicotine.digging.settings import DiggingSettings
+
+            settings = DiggingSettings.load()
+            ledger = Ledger(settings.rolodex_path, settings.member_name)
+
+            return self._reply(HTTPStatus.OK, {
+                "path": str(ledger.path),
+                "member": ledger.member,
+                "entries": ledger.as_list(),
+            })
+
         if parts == ["crate"]:
             from pynicotine.digging.actions import crate_for
 

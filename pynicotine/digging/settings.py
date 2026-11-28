@@ -128,6 +128,10 @@ class DiggingSettings:
     warp_mode: str = "complex"          # beats | tones | texture | repitch | complex | complex_pro
     open_after_build: bool = True
 
+    # Collective ledger
+    rolodex_path: str = ""               # point at a synced folder to share
+    member_name: str = ""                # who found it
+
     # Auditioning
     preview_bytes: int = 2 * 1024 * 1024  # roughly 40-60 s of MP3, enough to judge a loop
     player: str = "afplay"
@@ -155,6 +159,17 @@ class DiggingSettings:
 
         if not self.live_app:
             self.live_app = str(default_live_app())
+
+        if not self.rolodex_path:
+            from pynicotine.digging.rolodex import default_path
+
+            self.rolodex_path = os.environ.get("TRIBE_ROLODEX_PATH") or str(default_path())
+
+        if not self.member_name:
+            self.member_name = (os.environ.get("TRIBE_MEMBER")
+                                or os.environ.get("USER")
+                                or os.environ.get("USERNAME")
+                                or "unknown")
 
     @property
     def path(self) -> Path:

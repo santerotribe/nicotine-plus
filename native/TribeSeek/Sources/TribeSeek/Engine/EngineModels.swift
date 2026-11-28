@@ -208,6 +208,32 @@ struct StemFile: Identifiable, Hashable {
     var exists: Bool { FileManager.default.fileExists(atPath: path) }
 }
 
+struct RolodexEntry: Decodable, Identifiable {
+
+    let peer: String
+    let virtualPath: String
+    let folder: String
+    let filename: String
+    let kind: String
+    let foundBy: String
+    let addedAt: Double
+
+    var id: String { peer + "/" + virtualPath }
+
+    enum CodingKeys: String, CodingKey {
+        case peer, folder, filename, kind
+        case virtualPath = "virtual_path"
+        case foundBy = "found_by"
+        case addedAt = "added_at"
+    }
+}
+
+struct RolodexPage: Decodable {
+    let path: String
+    let member: String
+    let entries: [RolodexEntry]
+}
+
 struct UserStatusRow: Decodable {
     let username: String
     let status: String

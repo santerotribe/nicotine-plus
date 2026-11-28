@@ -114,7 +114,7 @@ struct SourceCard: View {
                 .help(source.starred ? "Unstar this source" : "Star this source")
             }
 
-            Text("\(source.keeps) KEEPS · \(source.dj) DJ · \(source.sample) SAMPLE")
+            Text(source.statsLabel)
                 .font(Theme.mono(8.5))
                 .foregroundStyle(Theme.textTertiary)
 
@@ -124,6 +124,13 @@ struct SourceCard: View {
                     .foregroundStyle(Theme.textMuted)
                     .lineLimit(1)
                     .help(source.topFolder ?? "")
+            }
+
+            if !source.foundByList.isEmpty {
+                Text("found by \(source.foundByList)")
+                    .font(Theme.mono(8))
+                    .foregroundStyle(Theme.textMuted)
+                    .lineLimit(1)
             }
 
             Spacer(minLength: 2)
@@ -149,7 +156,7 @@ struct SourceCard: View {
             }
         }
         .padding(12)
-        .frame(height: 142, alignment: .topLeading)
+        .frame(height: 158, alignment: .topLeading)
         .background(
             RoundedRectangle(cornerRadius: 6)
                 .fill(Theme.bgCard)

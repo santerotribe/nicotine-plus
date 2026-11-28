@@ -25,6 +25,8 @@ final class RolodexModel {
         var folders: [String: Int] = [:]
         var lastAdded = 0.0
         var starred = false
+        var crew = 0
+        var foundBy: Set<String> = []
 
         var id: String { username }
 
@@ -45,10 +47,26 @@ final class RolodexModel {
                 relativeTo: Date()
             )
         }
+
+        var statsLabel: String {
+            let mine = "\(keeps) \(keeps == 1 ? "KEEP" : "KEEPS")"
+
+            if crew > 0 {
+                return "\(mine) · \(crew) CREW · \(dj) DJ"
+            }
+
+            return "\(mine) · \(dj) DJ · \(sample) SAMPLE"
+        }
+
+        var foundByList: String {
+            foundBy.sorted().joined(separator: ", ")
+        }
     }
 
     var client: EngineClient?
     var tracks: [CrateTrack] = []
+    var ledger: [RolodexEntry] = []
+    var member = ""
     var statuses: [String: String] = [:]
     var filter = ""
     var isLoading = false
@@ -80,6 +98,11 @@ final class RolodexModel {
 
         if let page = try? await client.crate() {
             tracks = page.tracks
+        }
+
+        if let page = try? await client.rolodex() {
+            ledger = page.entries
+            member = page.member
         }
 
         starredPeers = Set(UserDefaults.standard.stringArray(forKey: "rolodex.starred") ?? [])
@@ -163,6 +186,21 @@ final class RolodexModel {
             source.lastAdded = max(source.lastAdded, track.addedAt ?? 0)
             source.starred = starredPeers.contains(track.username)
             map[track.username] = source
+        }
+
+        // The collective ledger adds peers and counts from other members.
+        for entry in ledger where !entry.peer.isEmpty {
+            var source = map[entry.peer] ?? Source(username: entry.peer)
+
+            source.crew += 1
+
+            if !entry.foundBy.isEmpty {
+                source.foundBy.insert(entry.foundBy)
+            }
+
+            source.lastAdded = max(source.lastAdded, entry.addedAt)
+            source.starred = starredPeers.contains(entry.peer)
+            map[entry.peer] = source
         }
 
         // A starred peer with nothing kept yet is still a source worth keeping.
