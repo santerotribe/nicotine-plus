@@ -81,7 +81,7 @@ final class BrowserModel {
     /// Narrows the folder column without touching the share itself.
     var folderFilter = ""
     /// Folders as cards rather than rows.
-    var binGrid = false
+    var binGrid = true
     var binSort: BinSort = .promising
     /// Folders that appeared or grew since this peer's last visit.
     var fresh: Set<String> = []
