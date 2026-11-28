@@ -73,6 +73,13 @@ struct BrowseDetail: View {
                 }
             }
 
+            if !model.browse.note.isEmpty {
+                Text(model.browse.note)
+                    .font(Theme.mono(8.5))
+                    .foregroundStyle(Theme.accent)
+                    .lineLimit(1)
+            }
+
             Spacer()
 
             Button("Switch peer") {
@@ -237,14 +244,26 @@ struct BrowseDetail: View {
                 Spacer(minLength: 8)
 
                 if let user = model.browse.selectedUser, let file = firstPlayableFile {
-                    Button("Audition bin") {
-                        Task {
-                            await model.audition(user: user, folder: name, file: file)
+                    VStack(alignment: .trailing, spacing: 6) {
+                        Button("Audition bin") {
+                            Task {
+                                await model.audition(user: user, folder: name, file: file)
+                            }
                         }
+                        .buttonStyle(DigKeyStyle(dense: true))
+                        .amberFocus()
+                        .help("Audition the first track in this bin")
+
+                        Button("Keep all") {
+                            Task {
+                                await model.keepBin(user: user, folder: name,
+                                                    files: playableFiles)
+                            }
+                        }
+                        .buttonStyle(DigKeyStyle(dense: true))
+                        .amberFocus()
+                        .help("Keep every audio file in this bin for the Sample crate")
                     }
-                    .buttonStyle(DigKeyStyle(dense: true))
-                    .amberFocus()
-                    .help("Audition the first track in this bin")
                 }
             }
             .padding(.horizontal, 16)
@@ -257,13 +276,17 @@ struct BrowseDetail: View {
         }
     }
 
-    private var firstPlayableFile: SharedFileRow? {
+    private var playableFiles: [SharedFileRow] {
 
         let extensions: Set<String> = ["mp3", "flac", "wav", "aif", "aiff", "m4a", "ogg", "opus"]
 
-        return model.browse.files.first {
+        return model.browse.files.filter {
             extensions.contains(($0.name as NSString).pathExtension.lowercased())
         }
+    }
+
+    private var firstPlayableFile: SharedFileRow? {
+        playableFiles.first
     }
 
     private var fileList: some View {

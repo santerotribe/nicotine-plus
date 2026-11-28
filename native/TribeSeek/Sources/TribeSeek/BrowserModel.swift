@@ -139,6 +139,8 @@ final class BrowserModel {
     var isLoading = false
     var isBrowsing = false
     var error = ""
+    /// Short-lived confirmation after a bulk action, shown in the shelf header.
+    var note = ""
 
     var filteredFolders: [FolderRow] {
 

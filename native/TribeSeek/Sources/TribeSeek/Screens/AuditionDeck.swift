@@ -140,13 +140,25 @@ private struct RibbonDeck: View {
 
         let kept = state.kept || model.audition.isKept
 
-        return Button(kept ? "Kept" : "Keep") {
-            Task { await model.keep() }
+        return HStack(spacing: 6) {
+            Button(kept ? "Kept" : "Keep") {
+                Task { await model.keep(kind: "sample") }
+            }
+            .buttonStyle(DigPrimaryKeyStyle())
+            .disabled(kept)
+            .opacity(kept ? 0.55 : 1)
+            .amberFocus()
+            .help("Keep to the Sample crate")
+
+            Button("DJ") {
+                Task { await model.keep(kind: "dj") }
+            }
+            .buttonStyle(DigKeyStyle(dense: true))
+            .disabled(kept)
+            .opacity(kept ? 0.55 : 1)
+            .amberFocus()
+            .help("Keep to the DJ crate")
         }
-        .buttonStyle(DigPrimaryKeyStyle())
-        .disabled(kept)
-        .opacity(kept ? 0.55 : 1)
-        .amberFocus()
     }
 
     private var dragKey: some View {

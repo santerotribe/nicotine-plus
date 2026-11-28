@@ -221,6 +221,53 @@ struct EngineClient {
         _ = try await delete("/search/\(token)", as: Response.self)
     }
 
+    func keepBin(user: String, folder: String, files: [SharedFileRow],
+                 kind: String = "sample") async throws -> Int {
+
+        struct Attributes: Encodable {
+            let bitrate: Int?
+            let length: Int?
+            let vbr: Int?
+            let sampleRate: Int?
+            let bitDepth: Int?
+
+            enum CodingKeys: String, CodingKey {
+                case bitrate, length, vbr
+                case sampleRate = "sample_rate"
+                case bitDepth = "bit_depth"
+            }
+        }
+
+        struct Item: Encodable {
+            let username: String
+            let folder: String
+            let filename: String
+            let size: Int64
+            let attributes: Attributes
+        }
+
+        struct Body: Encodable {
+            let files: [Item]
+            let kind: String
+        }
+
+        struct Response: Decodable {
+            let count: Int
+        }
+
+        let items = files.map {
+            Item(username: user, folder: folder, filename: $0.name, size: $0.size,
+                 attributes: Attributes(bitrate: $0.bitrate, length: $0.length,
+                                        vbr: $0.vbr, sampleRate: $0.sampleRate,
+                                        bitDepth: $0.bitDepth))
+        }
+
+        let response: Response = try await post(
+            "/crate/keep", body: Body(files: items, kind: kind), as: Response.self)
+
+        return response.count
+    }
+
     func separateCrateTrack(id: String) async throws {
         struct Response: Decodable { let separating: String }
         _ = try await post("/crate/\(escape(id))/separate", as: Response.self)

@@ -575,6 +575,34 @@ final class AppModel {
 
     /// End the server-side session too, so the preview transfer is paused and
     /// the cache sweep can clean the file up.
+    @discardableResult
+    func keepBin(user: String, folder: String, files: [SharedFileRow],
+                 kind: String = "sample") async -> Int {
+
+        guard let client, !files.isEmpty else { return 0 }
+
+        do {
+            let count = try await client.keepBin(user: user, folder: folder,
+                                                 files: files, kind: kind)
+            await crate.load()
+            browse.note = "Kept \(count) tracks to the \(kind == "dj" ? "DJ" : "Sample") crate"
+
+            Task { [weak self] in
+                try? await Task.sleep(nanoseconds: 6_000_000_000)
+
+                if self?.browse.note.hasPrefix("Kept ") == true {
+                    self?.browse.note = ""
+                }
+            }
+
+            return count
+
+        } catch {
+            browse.note = error.localizedDescription
+            return 0
+        }
+    }
+
     func closeAudition() async {
 
         if let client, let id = audition.sessionID {
@@ -589,15 +617,17 @@ final class AppModel {
         loadedLocation = ""
     }
 
-    func keep() async {
+    func keep(kind: String = "sample") async {
 
         guard let client, let id = audition.sessionID else { return }
 
         do {
-            let track = try await client.keepAudition(id: id)
+            let track = try await client.keepAudition(id: id, kind: kind)
             audition.keptTrackID = track.id
             audition.keptStatus = track.status
-            audition.note = "Kept — separating when the download lands"
+            audition.note = kind == "dj"
+                ? "Kept to the DJ crate — separating when the download lands"
+                : "Kept to the Sample crate — separating when the download lands"
             audition.isSeparating = true
             await crate.load()
             watchStems(trackID: track.id)

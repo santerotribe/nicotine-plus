@@ -572,6 +572,59 @@ class Handler(BaseHTTPRequestHandler):
             track = self._invoke(lambda: session.keep(kind))
             return self._reply(HTTPStatus.ACCEPTED, {"track": track, "audition": session.summary()})
 
+        if parts == ["crate", "keep"]:
+            from pynicotine.core import core
+            from pynicotine.digging.actions import TrackSource, keep_source
+            from pynicotine.digging.crate import KINDS
+            from pynicotine.digging.settings import DiggingSettings
+            from pynicotine.engineapi.serialize import crate_track_dict
+            from pynicotine.slskmessages import FileAttributes
+
+            payload = self._body()
+            items = payload.get("files") or []
+            kind = str(payload.get("kind") or "sample")
+
+            if kind not in KINDS:
+                return self._error(HTTPStatus.BAD_REQUEST, f"unknown crate kind: {kind}")
+
+            if not isinstance(items, list) or not items:
+                return self._error(HTTPStatus.BAD_REQUEST, "files must be a non-empty list")
+
+            def keep_all() -> list[dict]:
+
+                settings = DiggingSettings.load()
+                kept = []
+
+                for item in items:
+                    if not isinstance(item, dict):
+                        continue
+
+                    attributes = item.get("attributes") or {}
+                    source = TrackSource(
+                        username=str(item.get("username") or ""),
+                        folder_path=str(item.get("folder") or ""),
+                        filename=str(item.get("filename") or ""),
+                        size=int(item.get("size") or 0),
+                        attributes=FileAttributes(
+                            bitrate=attributes.get("bitrate"),
+                            length=attributes.get("length"),
+                            vbr=attributes.get("vbr"),
+                            sample_rate=attributes.get("sample_rate"),
+                            bit_depth=attributes.get("bit_depth"),
+                        ),
+                    )
+
+                    if not source.username or not source.filename:
+                        continue
+
+                    kept.append(crate_track_dict(keep_source(core, source, settings, kind=kind)))
+
+                return kept
+
+            kept = self._invoke(keep_all)
+
+            return self._reply(HTTPStatus.ACCEPTED, {"kept": kept, "count": len(kept)})
+
         if len(parts) == 3 and parts[0] == "crate" and parts[2] == "kind":
             from pynicotine.digging.actions import crate_for
 

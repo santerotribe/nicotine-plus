@@ -147,7 +147,7 @@ struct CrateDetail: View {
                         InstrumentLabel(text: track.username)
                         StatusChip(text: track.status, color: statusColor(track.status))
 
-                        if let bpm = track.bpm {
+                        if let bpm = track.bpm, bpm > 0 {
                             Text(String(format: "%.1f BPM", bpm))
                                 .font(Theme.monoStrong(10))
                                 .tracking(0.6)
